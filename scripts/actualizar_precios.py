@@ -15,6 +15,7 @@ UA = "Mozilla/5.0 (CestaApp; uso personal)"
 HERE = os.path.dirname(os.path.abspath(__file__))
 import sys; sys.path.insert(0, HERE)
 from nutricion import NUT, UD_G  # noqa: E402
+import enriquecer  # noqa: E402
 CACHE = os.path.join(HERE, "mercadona_cache.json")
 OUT = os.path.join(HERE, "..", "web", "data")
 
@@ -280,23 +281,31 @@ def best_mercadona(products, it):
     extra, refp, price, p = min((c for c in cands if c[0] <= min_extra + 3), key=lambda c: c[1])
     return dict(price=round(refp * it["qty"], 2), sale_price=price, ref_price=round(refp, 4),
                 product=p["display_name"] + (f" · {p['packaging']}" if p.get("packaging") else ""),
-                url=p.get("share_url"), sec=p.get("_top", ""),
+                url=p.get("share_url"), sec=p.get("_top", ""), pid=p["id"],
                 img=(IMG_RX.search(p.get("thumbnail") or "") or [None, ""])[1])
 
 
-def compact_catalog(products):
+def compact_catalog(products, nut=None, hist=None):
     """Catálogo completo en formato compacto:
-    [id, nombre, envase, precio, €/ref, ref, sección, pasillo, estante, foto]"""
+    [id, nombre, envase, precio, €/ref, ref, sección, pasillo, estante, foto, precio anterior si ha bajado,
+     nutrición por 100 g [kcal, proteínas, grasas, hidratos] o 0, Nutri-Score]"""
     rows, seen = [], set()
+    nut = nut or {}
     for p in products:
         if p["id"] in seen or p.get("_top") == "Maquillaje":
             continue
         seen.add(p["id"])
         pi = p["price_instructions"]
+        price = float(pi["unit_price"])
         m = IMG_RX.search(p.get("thumbnail") or "")
-        rows.append([p["id"], p["display_name"], p.get("packaging") or "", float(pi["unit_price"]),
-                     float(pi.get("reference_price") or pi["unit_price"]), pi.get("reference_format") or "",
-                     p.get("_catname", ""), p.get("_top", ""), p.get("_l2", ""), m.group(1) if m else ""])
+        prev = float(pi.get("previous_unit_price") or 0) if pi.get("price_decreased") else 0
+        if hist is not None:
+            prev = max(prev, enriquecer.previous_price(hist, p["id"], price))
+        n = nut.get(p["id"])
+        rows.append([p["id"], p["display_name"], p.get("packaging") or "", price,
+                     float(pi.get("reference_price") or price), pi.get("reference_format") or "",
+                     p.get("_catname", ""), p.get("_top", ""), p.get("_l2", ""), m.group(1) if m else "",
+                     round(prev, 2) if prev > price + 0.001 else 0, n[:4] if n else 0, n[4] if n else ""])
     return rows
 
 
@@ -306,6 +315,11 @@ def main():
     print(f"Mercadona: {len(merc)} productos")
     if len(merc) < 1000:
         raise SystemExit("Catálogo de Mercadona demasiado pequeño; no se actualizan los datos.")
+    try:
+        nut = enriquecer.nutrition_by_pid(merc)
+    except Exception as e:  # la nutrición es un extra: si falla, se publican los precios igualmente
+        print("  aviso nutrición:", e)
+        nut = {}
     items, missing = [], []
     for it in CATALOG:
         m = best_mercadona(merc, it)
@@ -317,6 +331,8 @@ def main():
             extra["nut"] = NUT[it["name"]]
         if it["name"] in UD_G:
             extra["gud"] = UD_G[it["name"]]
+        if m and nut.get(m["pid"]):
+            extra["real"] = nut[m["pid"]]
         items.append(dict(name=it["name"], unit=it["unit"], qty=it["qty"], ref=it["ref"], pantry=it["pantry"], m=m, **extra))
     if len(missing) > 15:
         raise SystemExit(f"Faltan demasiados precios ({len(missing)}): {', '.join(missing)}")
@@ -324,8 +340,12 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     with open(os.path.join(OUT, "precios.json"), "w", encoding="utf-8") as f:
         json.dump(dict(updated=updated, items=items), f, ensure_ascii=False, separators=(",", ":"))
+    rows = compact_catalog(merc)
+    hist = enriquecer.update_history(rows, updated[:10])
+    rows = compact_catalog(merc, nut, hist)
     with open(os.path.join(OUT, "catalogo.json"), "w", encoding="utf-8") as f:
-        json.dump(dict(updated=updated, rows=compact_catalog(merc)), f, ensure_ascii=False, separators=(",", ":"))
+        json.dump(dict(updated=updated, rows=rows), f, ensure_ascii=False, separators=(",", ":"))
+    print(f"Bajadas de precio: {sum(1 for r in rows if r[10])} · con nutrición real: {sum(1 for r in rows if r[11])}")
     print(f"Guardados precios.json y catalogo.json · sin precio: {', '.join(missing) or 'ninguno'}")
 
 

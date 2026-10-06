@@ -1,8 +1,9 @@
 # Cesta
 
 App web para iPhone (y cualquier móvil): lista de la compra con precios reales de Mercadona,
-menú semanal que genera la lista, compras habituales y guardadas, recetario de más de 400 recetas
-con el tiempo de cada paso y temporizadores, e información nutricional.
+despensa con caducidades, menú semanal que genera la lista, compras habituales y guardadas,
+presupuesto, bajadas e historial de precios, recetario de más de 400 recetas con modo cocina y
+temporizadores, e información nutricional (datos reales de Open Food Facts cuando existen).
 
 Se instala desde Safari con **Compartir → Añadir a pantalla de inicio** y funciona sin conexión.
 Los datos del usuario (lista, menú, historial) se guardan solo en el móvil; en Ajustes se puede
@@ -19,6 +20,8 @@ hacer una copia de seguridad.
 | `scripts/make_icons.py` | Genera los iconos. |
 | `recetas_base.txt`, `recetas_extra_*.txt` | El recetario editable (formato explicado al principio de `recetas_base.txt`). |
 | `scripts/nutricion.py` | Valores nutricionales medios de referencia de los alimentos básicos. |
+| `scripts/enriquecer.py` | Códigos de barras, nutrición de Open Food Facts e historial semanal de precios. |
+| `scripts/cache/` | Cachés de códigos de barras y de Open Food Facts (se refresca cada 30 días). |
 | `.github/workflows/publicar.yml` | Cada lunes actualiza los precios y publica en GitHub Pages. |
 
 ## Uso habitual
@@ -36,3 +39,9 @@ python -m http.server 8000
 ```
 
 Y abre http://localhost:8000.
+
+## Datos de terceros
+
+- Precios y catálogo: tienda online de Mercadona.
+- Información nutricional: [Open Food Facts](https://world.openfoodfacts.org), base de datos abierta
+  bajo licencia [ODbL](https://opendatacommons.org/licenses/odbl/1-0/).

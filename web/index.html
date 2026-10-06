@@ -229,6 +229,62 @@ input.pill{border-radius:999px;padding:8px 14px;width:200px}
 .seg2 button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
 .top h1{background:linear-gradient(90deg,var(--ink) 60%,var(--leaf));-webkit-background-clip:text;background-clip:text;color:transparent}
 
+
+/* Vista Por comprar / En casa */
+.seg2.big button{padding:10px 8px;font-size:16px}
+.pip{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:10px;background:var(--mustard);color:#1b1b1b;font-size:12px;font-weight:800;padding:0 5px;margin-left:4px}
+.tip.warn{border:0;width:100%;text-align:left;color:var(--ink);align-items:center;cursor:pointer}
+.tip.warn b{color:var(--warn)}
+.bad{color:var(--danger)!important;font-weight:600}
+.warn-t{color:var(--warn)!important;font-weight:600}
+/* Bajadas de precio */
+.deal{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow)}
+.deal-ic{background:var(--leaf-soft)!important;color:var(--leaf)!important;font-size:22px!important}
+.badge.drop{background:rgba(248,113,113,.16);color:var(--danger)}
+.old{display:block;font-size:12px;font-weight:500;color:var(--muted);text-align:right}
+/* Nutri-Score */
+.ns{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;font-size:12px;font-weight:800;color:#fff;vertical-align:1px;margin-left:4px}
+.ns-a{background:#038141}.ns-b{background:#85bb2f}.ns-c{background:#fecb02;color:#1b1b1b}.ns-d{background:#ee8100}.ns-e{background:#e63e11}
+/* Presupuesto */
+.budget{display:grid;gap:6px;margin-top:8px;font-size:14px}
+.budget .bar{height:8px;border-radius:4px;background:rgba(255,255,255,.25);overflow:hidden}
+.budget .bar i{display:block;height:100%;border-radius:4px;background:#fff}
+.budget.near .bar i{background:#fde68a}
+.budget.over .bar i{background:#fecaca}
+.budget.over span{font-weight:700}
+/* Controles */
+input.short{width:130px;text-align:right}
+.switch{appearance:none;-webkit-appearance:none;width:51px;height:31px;border-radius:16px;background:var(--fill);position:relative;flex:none;margin:0;transition:background .2s}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.3);transition:transform .2s}
+.switch:checked{background:var(--leaf)}
+.switch:checked::after{transform:translateX(20px)}
+/* Gráfica de precio */
+.spark{width:100%;height:auto;display:block}
+.spark-l{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px;gap:8px}
+.cookbtn{font-size:17px}
+/* Modo cocina */
+.cook{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,0px) + 8px) 20px calc(env(safe-area-inset-bottom,0px) + 16px)}
+.ck-top{display:flex;align-items:center;gap:12px;min-height:44px}
+.ck-x{border:0;background:var(--fill);color:var(--ink);width:40px;height:40px;border-radius:50%;font-size:18px;flex:none}
+.ck-title{font:700 17px var(--font-d);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ck-dots{display:flex;gap:5px;margin:14px 0 8px}
+.ck-dots i{flex:1;height:4px;border-radius:2px;background:var(--fill)}
+.ck-dots i.past{background:color-mix(in srgb,var(--leaf) 45%,transparent)}
+.ck-dots i.on{background:var(--leaf)}
+.ck-body{flex:1;overflow-y:auto;display:flex;flex-direction:column;justify-content:center;gap:22px;padding:10px 0}
+.ck-kicker{margin:0;font-size:15px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--leaf)}
+.ck-text{margin:0;font:600 clamp(24px,7vw,34px)/1.3 var(--font-d);text-wrap:pretty}
+.ck-timer{min-height:56px;font-size:18px}
+.ck-ings{display:grid;gap:8px}
+.ck-ing{display:flex;align-items:center;gap:12px;background:var(--card);border:0;border-radius:12px;padding:12px 14px;font-size:18px;text-align:left;width:100%}
+.ck-ing span:nth-child(2){flex:1}
+.ck-ing b{color:var(--muted);font-weight:600;font-size:16px;white-space:nowrap}
+.ck-box{width:24px;height:24px;border-radius:7px;border:2px solid var(--line);flex:none}
+.ck-ing.on{opacity:.55}
+.ck-ing.on .ck-box{background:var(--leaf);border-color:var(--leaf)}
+.ck-nav{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+.ck-nav .btn{min-height:56px;font-size:18px}
+
 /* Hoja inferior */
 .sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
 .sheet .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.35);animation:fade .2s ease-out}
@@ -287,6 +343,7 @@ input.pill{border-radius:999px;padding:8px 14px;width:200px}
     <div class="sb" id="sheet-body"></div>
   </div>
 </div>
+<div class="cook" id="cook" role="dialog" aria-modal="true" aria-label="Modo cocina" hidden></div>
 <div class="timers" id="timers" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
