@@ -123,6 +123,10 @@ def update_off(force=False, max_minutes=None):
     return off["items"]
 
 
+def load_eans():
+    return _load(EAN_FILE, {})
+
+
 def nutrition_by_pid(products):
     eans = update_eans(products)
     off = update_off()

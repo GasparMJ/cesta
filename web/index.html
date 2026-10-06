@@ -285,6 +285,41 @@ input.short{width:130px;text-align:right}
 .ck-nav{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
 .ck-nav .btn{min-height:56px;font-size:18px}
 
+
+/* Buscador con botón de escanear */
+.searchrow{display:flex;gap:8px}
+.searchrow .field{flex:1;min-width:0}
+.scan-btn{border:0;background:var(--fill);color:var(--leaf);border-radius:12px;width:48px;flex:none;display:grid;place-items:center}
+.badge.warnb{background:var(--mustard-soft);color:var(--warn)}
+.chip.diet{background:var(--leaf-soft);color:var(--leaf);font-weight:600}
+/* Escáner */
+.scan{position:fixed;inset:0;z-index:55;background:#000;color:#fff;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top,0px) + 8px) 16px calc(env(safe-area-inset-bottom,0px) + 16px);gap:12px}
+.scan .ck-x{background:rgba(255,255,255,.18);color:#fff}
+.sc-view{position:relative;flex:1;min-height:0;border-radius:18px;overflow:hidden;background:#111}
+.sc-view video{width:100%;height:100%;object-fit:cover;display:block}
+.sc-frame{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.sc-frame i{width:78%;height:34%;border:3px solid #34d399;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.35)}
+.sc-msg{margin:0;text-align:center;font-size:15px;color:#d1d5db}
+.sc-manual{display:flex;gap:8px}
+.sc-manual input{flex:1;min-width:0;background:rgba(255,255,255,.12);color:#fff}
+/* Estadísticas */
+.chartbox{padding:12px 14px}
+.chart{width:100%;height:auto;display:block}
+.chart .ax{font-size:11px;fill:var(--muted);font-family:var(--font)}
+.chart .ax.on{fill:var(--ink);font-weight:700}
+.chart .barg{cursor:pointer}
+.chart-cap{margin:0 0 8px;font-size:15px;color:var(--muted)}
+.chart-cap b{color:var(--ink);font-size:18px;font-variant-numeric:tabular-nums}
+.tbl summary{font-size:13px;color:var(--leaf);cursor:pointer;margin-top:6px}
+.tbl table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+.tbl td{padding:4px 0;border-top:.5px solid var(--line);font-variant-numeric:tabular-nums}
+.tbl td:last-child{text-align:right}
+.hbar{display:grid;gap:5px;padding:7px 0}
+.hbar-l{display:flex;justify-content:space-between;gap:8px;font-size:15px}
+.hbar-l .num{color:var(--muted);font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hbar-t{height:8px;border-radius:4px;background:var(--fill);overflow:hidden}
+.hbar-t i{display:block;height:100%;border-radius:4px;background:var(--leaf)}
+
 /* Hoja inferior */
 .sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
 .sheet .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.35);animation:fade .2s ease-out}
@@ -343,6 +378,7 @@ input.short{width:130px;text-align:right}
     <div class="sb" id="sheet-body"></div>
   </div>
 </div>
+<div class="scan" id="scan" role="dialog" aria-modal="true" aria-label="Escáner de códigos de barras" hidden></div>
 <div class="cook" id="cook" role="dialog" aria-modal="true" aria-label="Modo cocina" hidden></div>
 <div class="timers" id="timers" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>

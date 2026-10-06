@@ -14,6 +14,7 @@ const norm = s => String(s || "").normalize("NFD").replace(/\p{M}/gu, "").toLowe
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const DAYS = [["lun", "Lunes"], ["mar", "Martes"], ["mie", "Miércoles"], ["jue", "Jueves"], ["vie", "Viernes"], ["sab", "Sábado"], ["dom", "Domingo"]];
 const SLOTS = [["comida", "Comida"], ["cena", "Cena"]];
+const SCAN_SVG = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>`;
 const SEARCH_SVG = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;
 const img = (id, size = 96) => id ? `<img class="thumb" loading="lazy" alt="" src="https://prod-mercadona.imgix.net/images/${id}.jpg?fit=crop&h=${size}&w=${size}">` : `<span class="thumb ph" aria-hidden="true"></span>`;
 const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
@@ -38,13 +39,14 @@ const catPill = name => `<span class="cat" style="--c:${colorFor(name)}">${esc(n
 const nsBadge = ns => ns ? `<span class="ns ns-${ns}" title="Nutri-Score ${ns.toUpperCase()}">${ns.toUpperCase()}</span>` : "";
 
 // ---------- Datos ----------
-let GEN = [], GENBY = {}, UPDATED = null, REC = [], RECBY = {}, MERC = null, MERCBY = {}, mercLoading = null, HIST = null;
+let GEN = [], GENBY = {}, UPDATED = null, REC = [], RECBY = {}, MERC = null, MERCBY = {}, EANBY = {}, mercLoading = null, HIST = null;
 function loadMerc() {
   if (MERC) return Promise.resolve(MERC);
   return mercLoading ??= fetch("data/catalogo.json").then(r => r.json()).then(d => {
     MERC = d.rows.map(r => ({pid: r[0], name: r[1], pack: r[2], price: r[3], ref: r[4], fmt: r[5], aisle: r[6], sec: r[7] || r[6],
-      shelf: r[8] || "", img: r[9] || "", prev: r[10] || 0, nut: r[11] || null, ns: r[12] || "", _n: norm(r[1])}));
+      shelf: r[8] || "", img: r[9] || "", prev: r[10] || 0, nut: r[11] || null, ns: r[12] || "", ean: r[13] || "", _n: norm(r[1])}));
     MERCBY = Object.fromEntries(MERC.map(m => [m.pid, m]));
+    EANBY = Object.fromEntries(MERC.filter(m => m.ean).map(m => [m.ean, m]));
     return MERC;
   }).catch(() => { mercLoading = null; return []; });
 }
@@ -53,7 +55,7 @@ const loadHist = () => HIST ? Promise.resolve(HIST) : fetch("data/historial.json
 // ---------- Estado (en el móvil) ----------
 const KEY = "cesta-app-v1";
 const defaultState = () => ({v: 1, tab: "lista", listView: "comprar", period: 1, list: [], hist: {}, trips: [], purchases: [],
-  despensa: [], autoPantry: true, budget: {week: null, month: null},
+  despensa: [], autoPantry: true, budget: {week: null, month: null}, diet: [], dietHide: false, comprasView: "compras", offNut: {}, eanMap: {},
   menu: {people: 2, prefs: "", days: {}}, ings: [], pantry: [], nut: {}, timers: [], tipClosed: false, theme: "dark"});
 let state = defaultState();
 try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) state = {...defaultState(), ...s, budget: {...defaultState().budget, ...(s.budget || {})}}; } catch (e) {}
@@ -81,6 +83,7 @@ function dropOf(i) { // {pct, prev} si el producto ha bajado de precio
 // Nutrición por 100 g: la tuya > la real de Open Food Facts > la de referencia del alimento básico
 function nutInfo(name, pid) {
   if (state.nut[name]) return {v: state.nut[name], src: "own"};
+  if (pid && state.offNut[pid]) return {v: state.offNut[pid].slice(0, 4), src: "off", ns: state.offNut[pid][4] || ""};
   const m = pid ? MERCBY[pid] : null;
   if (m?.nut) return {v: m.nut, src: "off", ns: m.ns};
   const g = GENBY[name];
@@ -110,6 +113,33 @@ const batchK = (r, ppl = state.menu.people || 2) => (r.raciones || 2) > 2 ? Math
 function recipeCost(r, ppl = state.menu.people || 2) { // coste de los ingredientes para ppl personas
   const k = batchK(r, ppl);
   return r.ingredientes.reduce((a, i) => a + (GENBY[i.n]?.m?.price || 0) * i.q * k, 0);
+}
+
+// ---------- Alergias, intolerancias y dietas ----------
+const MEATS = ["Pechuga de pollo", "Muslos de pollo", "Alitas de pollo", "Pechuga de pavo", "Carne picada mixta", "Lomo de cerdo", "Costillas de cerdo", "Filetes de ternera", "Ternera para guisar", "Conejo", "Chorizo", "Bacon", "Salchichas", "Jamón cocido", "Jamón serrano", "Caldo de pollo"];
+const FISH = ["Salmón", "Merluza congelada", "Bacalao", "Atún en aceite", "Sardinas en lata"];
+const SHELLFISH = ["Gambas congeladas", "Langostinos", "Calamares", "Mejillones frescos", "Sepia", "Mejillones en escabeche"];
+const DAIRY = ["Leche entera", "Leche semidesnatada", "Nata para cocinar", "Mantequilla", "Yogur natural", "Queso rallado", "Queso curado", "Queso fresco", "Mozzarella", "Queso de cabra"];
+const DIET = {
+  gluten: {label: "Sin gluten", ings: ["Pan de molde", "Barra de pan", "Tortillas de trigo", "Masa de hojaldre", "Pan rallado", "Pasta (macarrones)", "Espaguetis", "Fideos", "Harina de trigo", "Cuscús", "Galletas María", "Cereales de desayuno", "Copos de avena", "Salsa de soja"],
+    rx: /\b(pan|panes|harina|trigo|pasta|galleta|cereal|bolleria|pizza|rebozad|empanad|cerveza|cuscus|cous|espagueti|spaghetti|macarr|fideo|canelon|noqui|oblea|hojaldre|croissant|magdalena|bizcocho|tostada|biscote|picos|seitan|centeno|espelta|cebada|avena)/, not: /sin gluten/},
+  lactosa: {label: "Sin lactosa", ings: DAIRY, rx: /\b(leche|queso|quesito|yogur|nata|mantequilla|helado|batido|natillas|flan|kefir|mozzarella|burrata|bechamel)/, not: /sin lactosa|bebida (de )?(soja|avena|almendra|arroz)|vegetal/},
+  huevo: {label: "Sin huevo", ings: ["Huevos", "Mayonesa"], rx: /\b(huevo|mayonesa|tortilla de patata)/, not: /sin huevo/},
+  frutos: {label: "Sin frutos secos", ings: ["Almendras", "Nueces"], rx: /\b(almendra|nuez|nueces|avellana|pistacho|anacardo|cacahuete|turron|praline)/, not: /sin frutos/},
+  marisco: {label: "Sin marisco", ings: SHELLFISH, rx: /\b(gamba|langostino|calamar|mejillon|sepia|pulpo|almeja|berberecho|cangrejo|buey de mar|navaja|surimi|marisco)/},
+  pescado: {label: "Sin pescado", ings: [...FISH, ...SHELLFISH], rx: /\b(merluza|salmon|bacalao|atun|sardina|anchoa|boqueron|lubina|dorada|rape|caballa|bonito|pescado|gamba|langostino|calamar|mejillon|sepia|pulpo|surimi)/},
+  cerdo: {label: "Sin cerdo", ings: ["Lomo de cerdo", "Costillas de cerdo", "Chorizo", "Bacon", "Salchichas", "Jamón cocido", "Jamón serrano", "Carne picada mixta"], rx: /\b(cerdo|lomo|costilla|chorizo|bacon|salchich|jamon|panceta|morcilla|sobrasada|fuet|salchichon|mortadela|chopped|iberico)/},
+  vegetariano: {label: "Vegetariano", ings: [...MEATS, ...FISH, ...SHELLFISH], rx: /\b(pollo|pavo|ternera|vacuno|cerdo|lomo|costilla|chorizo|bacon|salchich|jamon|carne|conejo|cordero|merluza|salmon|bacalao|atun|sardina|anchoa|gamba|langostino|calamar|mejillon|sepia|pescado|lubina|dorada|rape)/},
+  vegano: {label: "Vegano", ings: [...MEATS, ...FISH, ...SHELLFISH, ...DAIRY, "Huevos", "Mayonesa", "Miel"], rx: /\b(pollo|pavo|ternera|vacuno|cerdo|jamon|carne|merluza|salmon|atun|gamba|pescado|leche|queso|yogur|nata|mantequilla|huevo|mayonesa|miel)/, not: /bebida (de )?(soja|avena|almendra|arroz)|vegetal|vegan/},
+};
+const activeDiets = () => (state.diet || []).filter(k => DIET[k]);
+function recipeAllowed(r) {
+  return activeDiets().every(k => { const d = DIET[k];
+    return !r.ingredientes.some(i => d.ings.includes(i.n)) && !(r.otros || []).some(o => d.rx.test(norm(o)) && !(d.not && d.not.test(norm(o)))); });
+}
+function productWarnings(name) { // dietas que el producto parece no cumplir, deducido de su nombre (aproximado)
+  const n = norm(name);
+  return activeDiets().filter(k => { const d = DIET[k]; return d.rx.test(n) && !(d.not && d.not.test(n)); }).map(k => DIET[k].label.replace(/^Sin /, ""));
 }
 
 // ---------- Presupuesto ----------
@@ -240,7 +270,7 @@ function renderLista() {
 
   const T = totals(), pending = state.list.filter(i => !i.done), done = state.list.filter(i => i.done);
   $("subtitle").textContent = state.list.length ? `${pending.length} por comprar${done.length ? ` · ${done.length} en la cesta` : ""}` : "";
-  h += `<button class="field fake" id="open-search">${SEARCH_SVG}<span>Añadir productos o ingredientes…</span></button>`;
+  h += `<div class="searchrow"><button class="field fake" id="open-search">${SEARCH_SVG}<span>Añadir productos o ingredientes…</span></button><button class="scan-btn" id="scan-list" aria-label="Escanear código de barras">${SCAN_SVG}</button></div>`;
   if (isIOS() && !isStandalone() && !state.tipClosed)
     h += `<div class="tip"><div><b>Instálala en tu iPhone</b>Pulsa Compartir y luego «Añadir a pantalla de inicio». Se abrirá como una app y funcionará sin conexión.</div><button id="tip-x" aria-label="Cerrar aviso">×</button></div>`;
   if (expiring.length) h += `<button class="tip warn" id="go-casa"><div><b>${expiring.length === 1 ? "1 producto caduca" : `${expiring.length} productos caducan`} pronto</b>${expiring.slice(0, 3).map(p => esc(p.name)).join(", ")}. Mira qué cocinar con ${expiring.length === 1 ? "él" : "ellos"}.</div><span class="chev">›</span></button>`;
@@ -283,6 +313,7 @@ function renderLista() {
   }
   el.innerHTML = h; bindLista(el);
   el.querySelector("#open-search").onclick = () => openSearch();
+  el.querySelector("#scan-list").onclick = () => openScanner("list");
   el.querySelector("#tip-x")?.addEventListener("click", () => { state.tipClosed = true; commit(); });
   el.querySelector("#go-casa")?.addEventListener("click", () => { state.listView = "casa"; commit(); });
   el.querySelector("#drops")?.addEventListener("click", openDrops);
@@ -337,7 +368,7 @@ function expLabel(p) {
 }
 function pantryHTML() {
   $("subtitle").textContent = state.despensa.length ? `${state.despensa.length} productos en casa` : "";
-  let h = `<button class="field fake" id="open-psearch">${SEARCH_SVG}<span>Añadir a la despensa…</span></button>`;
+  let h = `<div class="searchrow"><button class="field fake" id="open-psearch">${SEARCH_SVG}<span>Añadir a la despensa…</span></button><button class="scan-btn" id="scan-pantry" aria-label="Escanear código de barras">${SCAN_SVG}</button></div>`;
   if (!state.despensa.length) {
     return h + `<div class="empty"><div class="ill">🏠</div><h2>Tu despensa está vacía</h2>
       <p>Apunta lo que tienes en casa y cuándo caduca. El menú lo usará primero y no te lo volverá a pedir en la lista.${state.autoPantry ? " Lo que compres se añade solo al pulsar «Ya lo he comprado»." : ""}</p>
@@ -359,6 +390,7 @@ function pantryHTML() {
 }
 function bindPantry(el) {
   el.querySelector("#open-psearch")?.addEventListener("click", () => openSearch({target: "pantry"}));
+  el.querySelector("#scan-pantry")?.addEventListener("click", () => openScanner("pantry"));
   el.querySelector("#p-cook")?.addEventListener("click", () => { recPantry = true; showTab("recetas"); });
   el.querySelector("#p-last")?.addEventListener("click", () => { const p = state.purchases[0]; p.items.forEach(i => addPantry(i.pid ? {name: i.name, pid: i.pid, unit: i.unit, sec: i.sec, img: i.img} : i.name, i.n)); commit(); toast("Última compra añadida a la despensa"); });
   el.querySelectorAll("[data-pinc]").forEach(b => b.onclick = () => { const p = state.despensa[b.dataset.pinc]; p.n = Math.floor(p.n) + 1; commit(); });
@@ -451,9 +483,9 @@ function openSearch(opts = {}) {
 const addTo = (entry, target = searchTarget) => target === "pantry" ? addPantry(entry, 1) : addItem(entry);
 function resultRow(r) {
   const inList = searchTarget === "pantry" ? null : state.list.find(i => i.name === r.name);
-  const home = pantryQty(r.name);
+  const home = pantryQty(r.name), warns = productWarnings(r.name);
   return `<button class="rowi tap" data-add="${esc(JSON.stringify(r.entry))}">
-    ${img(r.img)}<span class="grow"><span class="t">${esc(r.name)} ${nsBadge(r.ns)}</span><span class="s">${esc(r.sub)}</span>${inList ? `<span class="s inl">✓ En tu lista: ${inList.n}</span>` : ""}${home ? `<span class="s inl">En casa: ${qtyTxt(home)}</span>` : ""}</span>
+    ${img(r.img)}<span class="grow"><span class="t">${esc(r.name)} ${nsBadge(r.ns)}${warns.length ? `<span class="badge warnb">⚠ ${esc(warns.join(", "))}</span>` : ""}</span><span class="s">${esc(r.sub)}</span>${inList ? `<span class="s inl">✓ En tu lista: ${inList.n}</span>` : ""}${home ? `<span class="s inl">En casa: ${qtyTxt(home)}</span>` : ""}</span>
     <span class="p">${r.price != null ? eur(r.price) : ""}${r.prev ? `<s class="old">${eur(r.prev)}</s>` : ""}</span><span class="plus" aria-hidden="true">＋</span></button>`;
 }
 const genRow = g => resultRow({name: g.name, sub: `${g.unit} · ${g.m?.product || ""}`, price: g.m?.price, img: g.m?.img, entry: g.name, ns: g.real?.[4]});
@@ -471,7 +503,7 @@ function renderResults(qraw, path, go) {
   if (words.length) {
     const hit = s => words.every(w => s.includes(w));
     const gens = GEN.filter(g => hit(norm(g.name))).slice(0, 6);
-    const mercs = (MERC || []).filter(r => hit(r._n)).sort((a, b) => a.name.length - b.name.length).slice(0, 60);
+    const mercs = (MERC || []).filter(r => hit(r._n) && !(state.dietHide && productWarnings(r.name).length)).sort((a, b) => a.name.length - b.name.length).slice(0, 60);
     h += `<div class="group"><button class="rowi tap" data-add="${esc(JSON.stringify(qraw.trim()))}"><span class="thumb ph txt" aria-hidden="true">Aa</span><span class="grow"><span class="t">Añadir «${esc(qraw.trim())}»</span><span class="s">Como ingrediente o producto suelto, sin precio</span></span><span class="plus" aria-hidden="true">＋</span></button></div>`;
     if (gens.length) h += `<div><div class="group-h"><span>Alimentos genéricos</span></div><div class="group">${gens.map(genRow).join("")}</div>
       <p class="foot">Usan siempre la opción más barata por kilo o litro y sirven para el menú y la nutrición.</p></div>`;
@@ -486,13 +518,13 @@ function renderResults(qraw, path, go) {
       const aisles = {}; all.filter(m => m.sec === path[0]).forEach(m => aisles[m.aisle] = (aisles[m.aisle] || 0) + 1);
       h += `<button class="back" data-up="1">‹ Secciones</button><div><div class="group-h"><span>${esc(path[0])}</span></div><div class="group">${Object.keys(aisles).map(a => `<button class="rowi tap" data-go="${esc(a)}"><span class="grow"><span class="t">${esc(a)}</span><span class="s">${aisles[a]} productos</span></span><span class="chev">›</span></button>`).join("")}</div></div>`;
     } else {
-      const items = all.filter(m => m.sec === path[0] && m.aisle === path[1]);
+      const items = all.filter(m => m.sec === path[0] && m.aisle === path[1] && !(state.dietHide && productWarnings(m.name).length));
       const shelves = {}; items.forEach(m => (shelves[m.shelf || "Otros"] ??= []).push(m));
       h += `<button class="back" data-up="1">‹ ${esc(path[0])}</button>` + Object.entries(shelves).map(([s, ms]) => `<div><div class="group-h"><span>${esc(s)}</span></div><div class="group">${ms.map(mercRow).join("")}</div></div>`).join("");
     }
     if (!MERC) h += `<p class="foot">Cargando el catálogo…</p>`;
   } else {
-    h += `<div class="group"><button class="rowi tap" id="browse"><span class="thumb ph txt" aria-hidden="true">≡</span><span class="grow"><span class="t">Explorar secciones de Mercadona</span><span class="s">Todos los productos ordenados por pasillos</span></span><span class="chev">›</span></button></div>`;
+    h += `<div class="group"><button class="rowi tap" id="scan-row"><span class="thumb ph txt" aria-hidden="true">${SCAN_SVG}</span><span class="grow"><span class="t">Escanear código de barras</span><span class="s">Con la cámara, en casa o en la tienda</span></span><span class="chev">›</span></button><button class="rowi tap" id="browse"><span class="thumb ph txt" aria-hidden="true">≡</span><span class="grow"><span class="t">Explorar secciones de Mercadona</span><span class="s">Todos los productos ordenados por pasillos</span></span><span class="chev">›</span></button></div>`;
     const hs = habituals().slice(0, 12);
     if (hs.length) h += `<div><div class="group-h"><span>Tus habituales</span></div><div class="group">${hs.map(x => x.pid ? mercRow(MERCBY[x.pid] || {name: x.name, pid: x.pid, pack: x.unit, price: x.price, ref: 0, fmt: "", img: x.img, sec: x.sec}) : (GENBY[x.name] ? genRow(GENBY[x.name]) : resultRow({name: x.name, sub: "", price: null, entry: x.name}))).join("")}</div></div>`;
     const basics = ["Leche entera", "Huevos", "Pan de molde", "Barra de pan", "Plátanos", "Tomate", "Patatas", "Cebolla", "Pechuga de pollo", "Yogur natural", "Arroz", "Pasta (macarrones)"].map(n => GENBY[n]).filter(Boolean);
@@ -500,35 +532,94 @@ function renderResults(qraw, path, go) {
   }
   box.innerHTML = h;
   box.querySelector("#browse")?.addEventListener("click", () => go([]));
+  box.querySelector("#scan-row")?.addEventListener("click", () => { const t = searchTarget; closeSheet(); openScanner(t); });
   box.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go([...path, b.dataset.go]));
   box.querySelectorAll("[data-up]").forEach(b => b.onclick = () => go(path.slice(0, -1)));
   bindAdd(box, searchTarget, () => renderResults(qraw, path, go));
 }
 
 // ---------- Compras anteriores ----------
+let statsRange = "3m", statsMonth = null;
+function purchaseSection(i) { return i.sec || GENBY[i.name]?.m?.sec || (i.pid && MERCBY[i.pid]?.sec) || "Otros"; }
 function renderCompras() {
+  const ps = state.purchases;
+  $("subtitle").textContent = ps.length ? `${ps.length} ${ps.length === 1 ? "compra guardada" : "compras guardadas"}` : "";
+  const el = $("s-compras");
+  if (!ps.length) {
+    el.innerHTML = `<div class="empty"><div class="ill">🧾</div><h2>Aún no hay compras</h2><p>Cuando termines de comprar, pulsa «Ya lo he comprado» en la lista. La compra quedará guardada aquí con su fecha y su importe, podrás repetirla y verás tus estadísticas de gasto.</p><button class="btn primary block" id="go-list">Ir a la lista</button></div>`;
+    el.querySelector("#go-list").addEventListener("click", () => showTab("lista"));
+    return;
+  }
+  const view = state.comprasView === "stats" ? "stats" : "compras";
+  let h = `<div class="seg2 big" role="group" aria-label="Vista"><button data-cv="compras" aria-pressed="${view === "compras"}">Compras</button><button data-cv="stats" aria-pressed="${view === "stats"}">Estadísticas</button></div>`;
+  h += view === "stats" ? statsHTML() : comprasListHTML();
+  el.innerHTML = h;
+  el.querySelectorAll("[data-cv]").forEach(b => b.onclick = () => { state.comprasView = b.dataset.cv; commit(); window.scrollTo(0, 0); });
+  el.querySelectorAll("[data-pur]").forEach(b => b.onclick = () => openPurchase(b.dataset.pur));
+  el.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { statsRange = b.dataset.range; renderCompras(); });
+  el.querySelectorAll("[data-mb]").forEach(b => b.onclick = () => { statsMonth = b.dataset.mb; renderCompras(); });
+}
+function comprasListHTML() {
   const ps = state.purchases, now = new Date();
   const month = ps.filter(p => { const d = new Date(p.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
-  const spentMonth = month.reduce((a, p) => a + p.total, 0), avg = ps.length ? ps.reduce((a, p) => a + p.total, 0) / ps.length : 0;
+  const spentMonth = month.reduce((a, p) => a + p.total, 0), avg = ps.reduce((a, p) => a + p.total, 0) / ps.length;
   const monthBudget = state.budget.month || (state.budget.week ? state.budget.week * 4.33 : null);
-  $("subtitle").textContent = ps.length ? `${ps.length} ${ps.length === 1 ? "compra guardada" : "compras guardadas"}` : "";
-  let h = "";
-  if (!ps.length) {
-    h = `<div class="empty"><div class="ill">🧾</div><h2>Aún no hay compras</h2><p>Cuando termines de comprar, pulsa «Ya lo he comprado» en la lista. La compra quedará guardada aquí con su fecha y su importe, y podrás repetirla.</p><button class="btn primary block" id="go-list">Ir a la lista</button></div>`;
-  } else {
-    h += `<div class="hero"><span class="lbl">Gastado este mes</span><span class="big">${eur(spentMonth)}</span>
+  let h = `<div class="hero"><span class="lbl">Gastado este mes</span><span class="big">${eur(spentMonth)}</span>
       ${budgetBar(spentMonth, monthBudget, "del mes")}
       <div class="kpis"><div><b>${month.length}</b>${month.length === 1 ? "compra" : "compras"} este mes</div><div><b>${eur(avg)}</b>de media por compra</div></div></div>`;
-    const byMonth = {};
-    ps.forEach(p => (byMonth[new Date(p.date).toLocaleDateString("es-ES", {month: "long", year: "numeric"})] ??= []).push(p));
-    h += Object.entries(byMonth).map(([m, list]) => `<div><div class="group-h"><span>${esc(m)}</span><span>${eur(list.reduce((a, p) => a + p.total, 0))}</span></div><div class="group">${
-      list.map(p => `<button class="rowi tap" data-pur="${p.id}"><span class="grow"><span class="t">${esc(fmtDate(p.date))}</span><span class="s one">${p.items.length} productos · ${esc(p.items.slice(0, 4).map(i => i.name).join(", "))}${p.items.length > 4 ? "…" : ""}</span></span><span class="p">${eur(p.total)}</span><span class="chev">›</span></button>`).join("")
-    }</div></div>`).join("");
-    h += `<p class="foot">Los importes son estimados con los precios de Mercadona del día en que guardaste cada compra.${monthBudget ? "" : " Puedes poner un presupuesto en Ajustes."}</p>`;
-  }
-  const el = $("s-compras"); el.innerHTML = h;
-  el.querySelector("#go-list")?.addEventListener("click", () => showTab("lista"));
-  el.querySelectorAll("[data-pur]").forEach(b => b.onclick = () => openPurchase(b.dataset.pur));
+  const byMonth = {};
+  ps.forEach(p => (byMonth[new Date(p.date).toLocaleDateString("es-ES", {month: "long", year: "numeric"})] ??= []).push(p));
+  h += Object.entries(byMonth).map(([m, list]) => `<div><div class="group-h"><span>${esc(m)}</span><span>${eur(list.reduce((a, p) => a + p.total, 0))}</span></div><div class="group">${
+    list.map(p => `<button class="rowi tap" data-pur="${p.id}"><span class="grow"><span class="t">${esc(fmtDate(p.date))}</span><span class="s one">${p.items.length} productos · ${esc(p.items.slice(0, 4).map(i => i.name).join(", "))}${p.items.length > 4 ? "…" : ""}</span></span><span class="p">${eur(p.total)}</span><span class="chev">›</span></button>`).join("")
+  }</div></div>`).join("");
+  return h + `<p class="foot">Los importes son estimados con los precios de Mercadona del día en que guardaste cada compra.${monthBudget ? "" : " Puedes poner un presupuesto en Ajustes."}</p>`;
+}
+const monthKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+const monthName = (k, opt = {month: "short"}) => new Date(k + "-15T12:00").toLocaleDateString("es-ES", opt).replace(".", "");
+function statsHTML() {
+  const ps = state.purchases, now = new Date();
+  const from = {"1m": new Date(now.getFullYear(), now.getMonth(), 1), "3m": new Date(now.getFullYear(), now.getMonth() - 2, 1), "12m": new Date(now.getFullYear(), now.getMonth() - 11, 1), "all": new Date(0)}[statsRange];
+  const inRange = ps.filter(p => new Date(p.date) >= from);
+  const spent = inRange.reduce((a, p) => a + p.total, 0);
+  const firstDate = inRange.length ? new Date(Math.min(...inRange.map(p => +new Date(p.date)))) : now;
+  const weeks = Math.max(1, (now - (statsRange === "all" ? firstDate : from)) / (7 * 864e5));
+  let h = `<div class="seg2" role="group" aria-label="Periodo">${[["1m", "Este mes"], ["3m", "3 meses"], ["12m", "12 meses"], ["all", "Todo"]].map(([k, l]) => `<button data-range="${k}" aria-pressed="${statsRange === k}">${l}</button>`).join("")}</div>`;
+  h += `<div class="hero"><span class="lbl">Gastado ${({"1m": "este mes", "3m": "en los últimos 3 meses", "12m": "en los últimos 12 meses", "all": "en total"})[statsRange]}</span><span class="big">${eur(spent)}</span>
+    <div class="kpis"><div><b>${inRange.length}</b>${inRange.length === 1 ? "compra" : "compras"}</div><div><b>${eur(inRange.length ? spent / inRange.length : 0)}</b>por compra</div><div><b>${eur(spent / weeks)}</b>por semana</div></div></div>`;
+  // Gasto por mes (últimos 6 meses)
+  const months = Array.from({length: 6}, (_, k) => monthKey(new Date(now.getFullYear(), now.getMonth() - 5 + k, 1)));
+  const perMonth = months.map(k => ({k, v: ps.filter(p => monthKey(new Date(p.date)) === k).reduce((a, p) => a + p.total, 0), n: ps.filter(p => monthKey(new Date(p.date)) === k).length}));
+  const budgetM = state.budget.month || (state.budget.week ? state.budget.week * 4.33 : null);
+  const sel = perMonth.find(m => m.k === statsMonth) || perMonth[perMonth.length - 1];
+  const maxV = Math.max(...perMonth.map(m => m.v), budgetM || 0, 1);
+  const W = 320, H = 150, B = 22, T = 14, bw = 30, gap = (W - bw * 6) / 6;
+  const y = v => H - B - (v / maxV) * (H - B - T);
+  h += `<div><div class="group-h"><span>Gasto por mes</span></div><div class="group chartbox">
+    <p class="chart-cap"><b>${eur(sel.v)}</b> en ${monthName(sel.k, {month: "long", year: "numeric"})} · ${sel.n} ${sel.n === 1 ? "compra" : "compras"}${budgetM ? ` · presupuesto ${eur(budgetM)}` : ""}</p>
+    <svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Gasto por mes en los últimos 6 meses">
+      <line x1="0" x2="${W}" y1="${H - B}" y2="${H - B}" stroke="var(--line)" stroke-width="1"/>
+      ${budgetM ? `<line x1="0" x2="${W}" y1="${y(budgetM).toFixed(1)}" y2="${y(budgetM).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4 4"/>` : ""}
+      ${perMonth.map((m, ix) => { const x = gap / 2 + ix * (bw + gap), top = y(m.v), on = m.k === sel.k, over = budgetM && m.v > budgetM;
+        return `<g data-mb="${m.k}" class="barg" role="button" tabindex="0" aria-label="${monthName(m.k, {month: "long"})}: ${eur(m.v)}">
+          <rect x="${(x - gap / 2).toFixed(1)}" y="0" width="${(bw + gap).toFixed(1)}" height="${H}" fill="transparent"/>
+          ${m.v ? `<path d="M${x},${H - B} V${(top + 4).toFixed(1)} q0,-4 4,-4 h${bw - 8} q4,0 4,4 V${H - B} Z" fill="${over ? "var(--danger)" : "var(--leaf)"}" opacity="${on ? 1 : 0.45}"/>` : ""}
+          <text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="ax ${on ? "on" : ""}">${monthName(m.k)}</text></g>`; }).join("")}
+    </svg>
+    <details class="tbl"><summary>Ver como tabla</summary><table>${perMonth.map(m => `<tr><td>${monthName(m.k, {month: "long", year: "numeric"})}</td><td>${m.n}</td><td>${eur(m.v)}</td></tr>`).join("")}</table></details>
+  </div><p class="foot">Toca un mes para ver su importe.${budgetM ? " La línea discontinua es tu presupuesto mensual; en rojo, los meses que lo superan." : ""}</p></div>`;
+  // Por sección
+  const bySec = {}, byProd = {};
+  inRange.forEach(p => p.items.forEach(i => {
+    const v = (i.price || 0) * i.n; if (!v) return;
+    const sec = purchaseSection(i); bySec[sec] = (bySec[sec] || 0) + v;
+    const pr = byProd[i.name] ??= {v: 0, c: 0, img: i.img}; pr.v += v; pr.c += 1;
+  }));
+  const secs = Object.entries(bySec).sort((a, b) => b[1] - a[1]), totalSec = secs.reduce((a, x) => a + x[1], 0) || 1, maxSec = secs[0]?.[1] || 1;
+  if (secs.length) h += `<div><div class="group-h"><span>En qué se va el dinero</span></div><div class="group" style="padding:12px 16px">${secs.map(([sec, v]) => `
+    <div class="hbar"><div class="hbar-l"><span>${dot(sec)}${esc(sec)}</span><span class="num">${eur(v)} · ${Math.round(v / totalSec * 100)} %</span></div><div class="hbar-t"><i style="width:${(v / maxSec * 100).toFixed(1)}%"></i></div></div>`).join("")}</div></div>`;
+  const prods = Object.entries(byProd).sort((a, b) => b[1].v - a[1].v).slice(0, 10);
+  if (prods.length) h += `<div><div class="group-h"><span>Lo que más gasto supone</span></div><div class="group">${prods.map(([name, x]) => `<div class="rowi">${img(x.img)}<span class="grow"><span class="t">${esc(name)}</span><span class="s">${x.c} ${x.c === 1 ? "vez" : "veces"}</span></span><span class="p">${eur(x.v)}</span></div>`).join("")}</div></div>`;
+  return h + `<p class="foot">Calculado con los precios estimados de cada compra guardada.</p>`;
 }
 function openPurchase(id) {
   const p = state.purchases.find(x => x.id === id); if (!p) return;
@@ -561,7 +652,8 @@ function renderRecetas() {
   $("subtitle").textContent = `${REC.length} recetas caseras`;
   const cats = ["Todas", ...new Set(REC.map(r => r.categoria))];
   const words = state.ings.map(norm), qw = norm(recQuery).split(/\s+/).filter(Boolean);
-  let rs = REC.filter(r => recCat === "Todas" || r.categoria === recCat);
+  const allowed = REC.filter(recipeAllowed), hiddenN = REC.length - allowed.length;
+  let rs = allowed.filter(r => recCat === "Todas" || r.categoria === recCat);
   if (recQuick) rs = rs.filter(r => r.tiempo <= 30);
   if (qw.length) rs = rs.filter(r => qw.every(w => recHay(r).includes(w)));
   const score = r => recScore(r, words) * 2 + (recPantry ? pantryScore(r) * 3 : 0);
@@ -576,7 +668,8 @@ function renderRecetas() {
       ${state.ings.length ? `<p class="foot">Las recetas que usan estos alimentos salen primero.</p>` : ""}</div>
     <div class="chips"><button class="chip ${recPantry ? "on" : ""}" id="r-pantry">🏠 Con lo que tengo en casa</button><button class="chip ${recCheap ? "on" : ""}" id="r-cheap">€ Más baratas</button><button class="chip ${recQuick ? "on" : ""}" id="quick">⏱ 30 min o menos</button></div>
     <div class="chips">${cats.map(c => `<button class="chip ${c === recCat ? "on" : ""}" data-cat="${esc(c)}">${esc(c)}</button>`).join("")}</div>
-    <p class="foot" style="margin-top:-8px">${rs.length} recetas${recPantry && !state.despensa.length ? " · tu despensa está vacía: añade productos en Lista → En casa" : ""}</p>
+    ${activeDiets().length ? `<div class="chips wrap">${activeDiets().map(k => `<span class="chip diet">✓ ${esc(DIET[k].label)}</span>`).join("")}<button class="chip" id="r-diet">Cambiar</button></div>` : ""}
+    <p class="foot" style="margin-top:-8px">${rs.length} recetas${hiddenN ? ` · ${hiddenN} ocultas por tus filtros de alimentación` : ""}${recPantry && !state.despensa.length ? " · tu despensa está vacía: añade productos en Lista → En casa" : ""}</p>
     <div class="rcards">${rs.slice(0, recShown).map(r => {
       const n = recipeNut(r), sc = recScore(r, words), ps = recPantry ? pantryScore(r) : 0, cost = recipeCost(r, 1);
       return `<button class="rcard" data-rec="${r.id}"><span class="t">${esc(r.nombre)}</span>
@@ -594,6 +687,7 @@ function renderRecetas() {
   el.querySelector("#r-pantry").onclick = () => { recPantry = !recPantry; recShown = 30; renderRecetas(); };
   el.querySelector("#r-cheap").onclick = () => { recCheap = !recCheap; recShown = 30; renderRecetas(); };
   el.querySelector("#more")?.addEventListener("click", () => { recShown += 30; renderRecetas(); });
+  el.querySelector("#r-diet")?.addEventListener("click", () => showTab("ajustes"));
   el.querySelectorAll("[data-rec]").forEach(b => b.onclick = () => openRecipe(b.dataset.rec));
 }
 function scaleAmount(a, k) {
@@ -641,6 +735,115 @@ function openRecipe(id) {
       save(); body.querySelector("#plan-box").innerHTML = planGrid(); bindPlan();
     });
     bindPlan();
+  }, renderAll);
+}
+
+// ---------- Escáner de códigos de barras ----------
+let scan = null;
+function loadZXing() {
+  return window.ZXing ? Promise.resolve(window.ZXing) : new Promise((ok, ko) => {
+    const sc = document.createElement("script"); sc.src = "vendor/zxing.min.js"; sc.onload = () => ok(window.ZXing); sc.onerror = ko; document.head.appendChild(sc);
+  });
+}
+async function openScanner(target = "list") {
+  const el = $("scan"); el.hidden = false; document.body.style.overflow = "hidden";
+  el.innerHTML = `<div class="ck-top"><button class="ck-x" id="sc-x" aria-label="Cerrar escáner">✕</button><span class="ck-title">Escanear ${target === "pantry" ? "para la despensa" : "para la lista"}</span></div>
+    <div class="sc-view"><video id="sc-video" playsinline muted autoplay></video><div class="sc-frame"><i></i></div></div>
+    <p class="sc-msg" id="sc-msg">Abriendo la cámara…</p>
+    <form class="sc-manual" id="sc-form"><input class="plain" id="sc-code" inputmode="numeric" autocomplete="off" placeholder="O escribe los números del código" aria-label="Número del código de barras"><button class="btn primary">Buscar</button></form>`;
+  scan = {target, stop: null, done: false};
+  $("sc-x").onclick = closeScanner;
+  $("sc-form").onsubmit = e => { e.preventDefault(); const c = $("sc-code").value.replace(/\D/g, ""); if (c.length >= 8) onBarcode(c); else toast("El código tiene 8 o 13 números"); };
+  loadMerc();
+  const video = $("sc-video");
+  try {
+    if ("BarcodeDetector" in window && (await BarcodeDetector.getSupportedFormats?.() || []).includes("ean_13")) {
+      const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}, audio: false});
+      video.srcObject = stream; await video.play();
+      const det = new BarcodeDetector({formats: ["ean_13", "ean_8", "upc_a", "upc_e"]});
+      let alive = true; scan.stop = () => { alive = false; stream.getTracks().forEach(t => t.stop()); };
+      $("sc-msg").textContent = "Centra el código de barras en el recuadro";
+      const tick = async () => { if (!alive || !scan) return; try { const r = await det.detect(video); if (r[0]) return onBarcode(r[0].rawValue); } catch (e) {} setTimeout(tick, 120); };
+      tick();
+    } else {
+      const ZX = await loadZXing();
+      const hints = new Map(); hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.EAN_13, ZX.BarcodeFormat.EAN_8, ZX.BarcodeFormat.UPC_A, ZX.BarcodeFormat.UPC_E]);
+      const reader = new ZX.BrowserMultiFormatReader(hints, 150);
+      if (!scan) return;
+      scan.stop = () => { try { reader.reset(); } catch (e) {} };
+      $("sc-msg").textContent = "Centra el código de barras en el recuadro";
+      await reader.decodeFromConstraints({video: {facingMode: "environment"}, audio: false}, video, res => { if (res && scan && !scan.done) onBarcode(res.getText()); });
+    }
+  } catch (e) {
+    const m = $("sc-msg"); if (!m) return;
+    m.textContent = e?.name === "NotAllowedError" ? "Cesta no tiene permiso para usar la cámara. Actívalo en Ajustes del iPhone → Safari → Cámara, o escribe los números del código." : "No se pudo abrir la cámara. Escribe los números que hay debajo de las barras.";
+  }
+}
+function closeScanner() { try { scan?.stop?.(); } catch (e) {} scan = null; $("scan").hidden = true; $("scan").innerHTML = ""; document.body.style.overflow = ""; renderAll(); }
+async function offLookup(code) {
+  try {
+    const d = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,nutriments,nutriscore_grade`).then(r => r.json());
+    if (d.status !== 1 || !d.product) return null;
+    const p = d.product, n = p.nutriments || {}, v = [n["energy-kcal_100g"], n.proteins_100g, n.fat_100g, n.carbohydrates_100g];
+    const ns = (p.nutriscore_grade || "").toLowerCase();
+    return {name: [p.product_name, p.brands].filter(Boolean).join(" · "), short: p.product_name || "",
+      nut: v.every(x => typeof x === "number") ? [Math.round(v[0]), ...v.slice(1).map(x => Math.round(x * 10) / 10), ns.length === 1 && "abcde".includes(ns) ? ns : ""] : null};
+  } catch (e) { return null; }
+}
+async function onBarcode(code) {
+  if (!scan || scan.done) return;
+  scan.done = true; const target = scan.target;
+  navigator.vibrate?.(60); closeScanner();
+  await loadMerc();
+  const m = MERCBY[state.eanMap[code]] || EANBY[code] || EANBY[code.padStart(13, "0")];
+  if (m) return scanResult(m, code, target);
+  openSheet(`Código ${code}`, `<p class="foot">Buscando el producto…</p>`, null, renderAll);
+  showUnknown(code, await offLookup(code), target);
+}
+function scanResult(m, code, target) {
+  const inList = state.list.find(i => i.pid === m.pid || i.name === m.name);
+  const needNut = !m.nut && !state.offNut[m.pid] && !state.nut[m.name];
+  openSheet("Producto escaneado", `
+    <div class="pcard">${img(m.img, 240)}<div><div class="t" style="font-weight:600">${esc(m.name)} ${nsBadge(m.ns || state.offNut[m.pid]?.[4])}</div>
+      <div class="big2">${eur(m.price)}</div><div class="s">${esc(m.pack || "")} · ${num(m.ref, 2)} €/${esc(m.fmt)}</div>
+      ${productWarnings(m.name).length ? `<div class="s warn-t">⚠ Puede no ser apto: ${esc(productWarnings(m.name).join(", "))}</div>` : ""}</div></div>
+    ${inList ? `<button class="btn primary block" id="sr-done">${inList.done ? "✓ Ya está en la cesta" : "✓ Marcar como comprado"}</button>` : ""}
+    <div class="btns"><button class="btn ${inList ? "" : "primary"}" id="sr-list">${inList ? "Uno más a la lista" : "Añadir a la lista"}</button><button class="btn ${target === "pantry" ? "primary" : ""}" id="sr-pantry">A la despensa</button></div>
+    <div class="group"><label class="rowi"><span class="grow">Caduca el (opcional)</span><input class="plain short" type="date" id="sr-exp"></label></div>
+    <p class="foot" id="sr-nut">${needNut ? "Buscando su información nutricional…" : ""}</p>
+    <button class="btn block" id="sr-again">Escanear otro</button>`, body => {
+    const entry = productEntry(m);
+    body.querySelector("#sr-done")?.addEventListener("click", () => { inList.done = true; save(); closeSheet(); toast(`Marcado como comprado: ${m.name}`); });
+    body.querySelector("#sr-list").onclick = () => { addItem(entry); save(); closeSheet(); toast(`Añadido a la lista: ${m.name}`); };
+    body.querySelector("#sr-pantry").onclick = () => { addPantry(entry, 1, body.querySelector("#sr-exp").value || null); save(); closeSheet(); toast(`Añadido a la despensa: ${m.name}`); };
+    body.querySelector("#sr-again").onclick = () => { closeSheet(); openScanner(target); };
+    if (needNut) offLookup(code).then(o => {
+      const el = body.querySelector("#sr-nut"); if (!el) return;
+      if (o?.nut) { state.offNut[m.pid] = o.nut; resetNutCache(); save(); el.textContent = `Información nutricional añadida: ${o.nut[0]} kcal por 100 g.`; }
+      else el.textContent = "Open Food Facts no tiene sus datos nutricionales. Puedes apuntarlos desde la ficha del producto.";
+    });
+  }, renderAll);
+}
+function showUnknown(code, off, target) {
+  const words = norm(off?.short || "").split(/\s+/).filter(w => w.length > 2).slice(0, 4);
+  const cands = words.length ? (MERC || []).map(m => ({m, s: words.filter(w => m._n.includes(w)).length})).filter(x => x.s >= Math.min(2, words.length)).sort((a, b) => b.s - a.s || a.m.name.length - b.m.name.length).slice(0, 5).map(x => x.m) : [];
+  openSheet(off ? "¿Qué producto es?" : `Código ${code}`, `
+    ${off ? `<p style="margin:0">Open Food Facts lo conoce como <b>${esc(off.name)}</b>${off.nut ? ` (${off.nut[0]} kcal por 100 g)` : ""}, pero aún no sé cuál es en el catálogo de Mercadona.</p>` : `<p style="margin:0">Este código no está en el catálogo de Mercadona que tiene Cesta ni en Open Food Facts. Puede ser un producto nuevo o de otra tienda.</p>`}
+    ${cands.length ? `<div><div class="group-h"><span>¿Es alguno de estos?</span></div><div class="group">${cands.map(m => `<button class="rowi tap" data-cand="${m.pid}">${img(m.img)}<span class="grow"><span class="t">${esc(m.name)}</span><span class="s">${esc(m.pack || "")}</span></span><span class="p">${eur(m.price)}</span></button>`).join("")}</div><p class="foot">Si eliges uno, Cesta recordará este código para la próxima vez.</p></div>` : ""}
+    ${off ? `<button class="btn block" id="su-free">Añadir como «${esc(off.short || off.name)}»</button>` : ""}
+    <button class="btn block" id="su-search">Buscarlo por nombre</button>
+    <button class="btn block" id="su-again">Escanear otro</button>`, body => {
+    body.querySelectorAll("[data-cand]").forEach(b => b.onclick = () => {
+      const m = MERCBY[b.dataset.cand]; state.eanMap[code] = m.pid;
+      if (off?.nut && !m.nut) { state.offNut[m.pid] = off.nut; resetNutCache(); }
+      save(); scanResult(m, code, target);
+    });
+    body.querySelector("#su-free")?.addEventListener("click", () => {
+      const name = off.short || off.name; if (off.nut) { state.nut[name] = off.nut.slice(0, 4); resetNutCache(); }
+      addTo(name, target); save(); closeSheet(); toast(`Añadido: ${name}`);
+    });
+    body.querySelector("#su-search").onclick = () => { closeSheet(); openSearch({target, initial: off?.short || ""}); };
+    body.querySelector("#su-again").onclick = () => { closeSheet(); openScanner(target); };
   }, renderAll);
 }
 
@@ -741,7 +944,7 @@ function filteredPool() {
   const map = {cerdo: ["lomo", "costilla", "chorizo", "bacon", "salchicha", "jamon"], carne: ["pollo", "pavo", "ternera", "cerdo", "lomo", "costilla", "chorizo", "bacon", "salchicha", "jamon", "carne", "conejo", "alitas", "muslos"], pescado: ["merluza", "salmon", "bacalao", "atun", "sardina", "gamba", "langostino", "calamar", "sepia", "mejillon", "lubina", "dorada", "rape"], marisco: ["gamba", "langostino", "calamar", "sepia", "mejillon"], gluten: ["pasta", "espagueti", "macarron", "fideo", "pan", "harina", "hojaldre", "tortillas de trigo", "cuscus", "galleta"], lactosa: ["leche", "nata", "queso", "yogur", "mantequilla", "mozzarella"], huevo: ["huevo"]};
   const words = avoid.flatMap(a => map[a] || [a]);
   const quick = /rapid|poco tiempo/.test(prefs);
-  return REC.filter(r => !["Postres", "Desayunos"].includes(r.categoria) && (!quick || r.tiempo <= 40) && !words.some(w => recHay(r).includes(w)));
+  return REC.filter(r => !["Postres", "Desayunos"].includes(r.categoria) && (!quick || r.tiempo <= 40) && !words.some(w => recHay(r).includes(w)) && recipeAllowed(r));
 }
 function autoMenu(redo) {
   if (!REC.length) return;
@@ -845,7 +1048,7 @@ function openPicker(d, s) {
     <div id="plist"></div>`, body => {
     const draw = () => {
       const qw = norm(body.querySelector("#pq").value).split(/\s+/).filter(Boolean), likes = state.ings.map(norm);
-      let rs = REC.filter(r => r.momento.includes(s));
+      let rs = REC.filter(r => r.momento.includes(s) && recipeAllowed(r));
       if (qw.length) rs = rs.filter(r => qw.every(w => recHay(r).includes(w)));
       rs = rs.sort((a, b) => (recScore(b, likes) + pantryScore(b)) - (recScore(a, likes) + pantryScore(a)) || a.nombre.localeCompare(b.nombre, "es")).slice(0, 80);
       body.querySelector("#plist").innerHTML = `<div class="group">${rs.map(r => `<button class="rowi tap" data-pick="${r.id}"><span class="grow"><span class="t">${esc(r.nombre)}${r.id === cur ? " ✓" : ""}</span><span class="s">${dot(r.categoria)}${r.tiempo} min · ${num(recipeNut(r)[0])} kcal · ${eur(recipeCost(r))}</span></span><span class="chev">›</span></button>`).join("") || `<div class="rowi">Sin resultados</div>`}</div>`;
@@ -868,6 +1071,11 @@ function renderAjustes() {
     <div><div class="group-h"><span>Apariencia</span></div><div class="group" style="padding:12px 16px">
       <div class="seg2" role="group" aria-label="Tema">${[["dark", "Oscuro"], ["light", "Claro"], ["auto", "Sistema"]].map(([k, l]) => `<button data-theme-set="${k}" aria-pressed="${(state.theme || "dark") === k}">${l}</button>`).join("")}</div>
     </div><p class="foot">«Sistema» sigue el modo claro u oscuro del iPhone. La barra de arriba del iPhone se ajusta al volver a abrir la app.</p></div>
+    <div><div class="group-h"><span>Alimentación</span></div><div class="group" style="padding:12px 16px">
+      <div class="chips wrap">${Object.entries(DIET).map(([k, d]) => `<button class="chip ${activeDiets().includes(k) ? "on" : ""}" data-diet="${k}" aria-pressed="${activeDiets().includes(k)}">${activeDiets().includes(k) ? "✓ " : ""}${esc(d.label)}</button>`).join("")}</div>
+    </div><div class="group" style="margin-top:8px">
+      <label class="rowi"><span class="grow"><span class="t">Ocultar productos que no cumplan</span><span class="s">En el buscador y las secciones</span></span><input type="checkbox" class="switch" id="diet-hide" ${state.dietHide ? "checked" : ""}></label>
+    </div><p class="foot">Las recetas y el menú se filtran por sus ingredientes. En los productos de Mercadona se deduce del nombre, así que es orientativo: revisa siempre la etiqueta si tienes una alergia.</p></div>
     <div><div class="group-h"><span>Presupuesto</span></div><div class="group">
       <label class="rowi"><span class="grow">Por semana</span><input class="plain short" type="number" inputmode="decimal" min="0" step="5" id="b-week" value="${state.budget.week ?? ""}" placeholder="Sin límite"><span class="u">€</span></label>
       <label class="rowi"><span class="grow">Por mes</span><input class="plain short" type="number" inputmode="decimal" min="0" step="10" id="b-month" value="${state.budget.month ?? ""}" placeholder="Sin límite"><span class="u">€</span></label>
@@ -903,6 +1111,8 @@ function renderAjustes() {
   const bset = (id, key) => el.querySelector(id).onchange = e => { const v = parseFloat(String(e.target.value).replace(",", ".")); state.budget[key] = v > 0 ? v : null; save(); toast(v > 0 ? "Presupuesto guardado" : "Sin presupuesto"); };
   bset("#b-week", "week"); bset("#b-month", "month");
   el.querySelector("#auto-pantry").onchange = e => { state.autoPantry = e.target.checked; save(); };
+  el.querySelectorAll("[data-diet]").forEach(b => b.onclick = () => { const k = b.dataset.diet, d = new Set(activeDiets()); d.has(k) ? d.delete(k) : d.add(k); state.diet = [...d]; commit(); });
+  el.querySelector("#diet-hide").onchange = e => { state.dietHide = e.target.checked; save(); };
   el.querySelector("#exp").onclick = exportData;
   el.querySelector("#imp").onchange = e => importData(e.target.files[0]);
   twice(el.querySelector("#clr-hist"), "Pulsa otra vez para borrarlo", () => { state.hist = {}; state.trips = []; state.purchases = []; commit(); toast("Historial borrado"); });

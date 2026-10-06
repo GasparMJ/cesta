@@ -288,9 +288,10 @@ def best_mercadona(products, it):
 def compact_catalog(products, nut=None, hist=None):
     """Catálogo completo en formato compacto:
     [id, nombre, envase, precio, €/ref, ref, sección, pasillo, estante, foto, precio anterior si ha bajado,
-     nutrición por 100 g [kcal, proteínas, grasas, hidratos] o 0, Nutri-Score]"""
+     nutrición por 100 g [kcal, proteínas, grasas, hidratos] o 0, Nutri-Score, código de barras]"""
     rows, seen = [], set()
     nut = nut or {}
+    eans = enriquecer.load_eans()
     for p in products:
         if p["id"] in seen or p.get("_top") == "Maquillaje":
             continue
@@ -305,7 +306,8 @@ def compact_catalog(products, nut=None, hist=None):
         rows.append([p["id"], p["display_name"], p.get("packaging") or "", price,
                      float(pi.get("reference_price") or price), pi.get("reference_format") or "",
                      p.get("_catname", ""), p.get("_top", ""), p.get("_l2", ""), m.group(1) if m else "",
-                     round(prev, 2) if prev > price + 0.001 else 0, n[:4] if n else 0, n[4] if n else ""])
+                     round(prev, 2) if prev > price + 0.001 else 0, n[:4] if n else 0, n[4] if n else "",
+                     eans.get(p["id"], "")])
     return rows
 
 
