@@ -160,6 +160,45 @@ input.plain,select.plain{border:0;background:var(--fill);border-radius:10px;padd
 .tabbar svg{width:26px;height:26px}
 .tabbar .dot{position:absolute;margin-left:22px;margin-top:-2px;min-width:18px;height:18px;border-radius:9px;background:var(--mustard);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 5px}
 
+
+/* Miniaturas de producto */
+.thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none;background:#fff;box-shadow:inset 0 0 0 .5px var(--line)}
+.thumb.ph{background:var(--fill);box-shadow:none;display:grid;place-items:center;color:var(--muted);font-weight:700;font-size:15px}
+.linkish{border:0;background:none;text-align:left;padding:0;display:flex;gap:10px;align-items:center;min-width:0}
+.linkish .txt{min-width:0;display:block}
+.inl{color:var(--leaf)!important;font-weight:600}
+.plus{color:var(--leaf);font-size:24px;font-weight:300;flex:none;width:28px;text-align:center}
+.field.fake{border:0;width:100%;text-align:left;color:var(--muted);font-size:17px}
+.back{border:0;background:none;color:var(--leaf);font-size:17px;padding:4px 0;justify-self:start}
+.stack{display:grid;gap:0}
+.btn.ghost-danger{background:none;color:var(--muted)}
+.btn.danger,.btn.ghost-danger.danger{color:var(--danger)}
+.danger-t{color:var(--danger)}
+input.pill{border-radius:999px;padding:8px 14px;width:200px}
+#ing-form{display:flex}
+/* Ficha de producto */
+.pcard{display:flex;gap:14px;align-items:center;background:var(--card);border-radius:var(--r);padding:14px}
+.pcard .thumb{width:96px;height:96px;border-radius:12px}
+.pcard .s{display:block;font-size:14px;color:var(--muted);margin-top:2px}
+.big2{font:700 26px var(--font-d);font-variant-numeric:tabular-nums}
+.link{color:var(--leaf)!important;text-decoration:none;font-weight:600}
+.nutform input{width:90px;border:0;background:var(--fill);border-radius:8px;padding:8px 10px;text-align:right;font-size:16px;font-variant-numeric:tabular-nums}
+.nutform .u{width:34px;color:var(--muted);font-size:14px}
+.nutbar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--card);border-radius:var(--r);padding:12px 8px;text-align:center;font-size:12px;color:var(--muted)}
+.nutbar b{display:block;font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums}
+/* Pasos con temporizador */
+.step{align-items:flex-start;font-size:16px}
+.stepn{width:24px;height:24px;border-radius:50%;background:var(--leaf-soft);color:var(--leaf);font-size:13px;font-weight:700;display:grid;place-items:center;flex:none;margin-top:1px}
+.timer-btn{border:0;background:var(--mustard-soft);color:var(--ink);border-radius:999px;padding:5px 10px;font-size:14px;font-weight:600;white-space:nowrap;flex:none}
+.timers{position:fixed;left:12px;right:12px;bottom:calc(var(--tabh) + env(safe-area-inset-bottom,0px) + 10px);z-index:30;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;max-width:656px;margin:0 auto}
+.tmr{display:flex;align-items:center;gap:10px;background:var(--ink);color:var(--bg);border-radius:14px;padding:10px 12px 10px 16px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.tmr .tl{flex:1;min-width:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tmr b{font-size:20px;font-variant-numeric:tabular-nums}
+.tmr button{border:0;background:rgba(255,255,255,.18);color:inherit;border-radius:999px;min-width:34px;height:34px;font-weight:700}
+.tmr.done{background:var(--mustard);color:#1b1b1b;animation:pulse 1s ease-in-out infinite alternate}
+@keyframes pulse{to{transform:scale(1.02)}}
+.tabbar button{min-width:0;flex:1;padding:4px 2px}
+
 /* Hoja inferior */
 .sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
 .sheet .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.35);animation:fade .2s ease-out}
@@ -188,6 +227,7 @@ input.plain,select.plain{border:0;background:var(--fill);border-radius:10px;padd
   <section id="s-lista"></section>
   <section id="s-menu" hidden></section>
   <section id="s-recetas" hidden></section>
+  <section id="s-compras" hidden></section>
   <section id="s-ajustes" hidden></section>
 </main>
 
@@ -201,6 +241,9 @@ input.plain,select.plain{border:0;background:var(--fill);border-radius:10px;padd
   <button role="tab" data-tab="recetas" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M8 7c0-1.5 1-2 1-3M12 7c0-1.5 1-2 1-3M16 7c0-1.5 1-2 1-3"/></svg>
     Recetas</button>
+  <button role="tab" data-tab="compras" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+    Compras</button>
   <button role="tab" data-tab="ajustes" aria-selected="false">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6l2.4 1.8M17.4 16.2l2.4 1.8M2.5 12h3M18.5 12h3M4.2 18l2.4-1.8M17.4 7.8 19.8 6"/></svg>
     Ajustes</button>
@@ -214,6 +257,7 @@ input.plain,select.plain{border:0;background:var(--fill);border-radius:10px;padd
     <div class="sb" id="sheet-body"></div>
   </div>
 </div>
+<div class="timers" id="timers" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="app.js"></script>

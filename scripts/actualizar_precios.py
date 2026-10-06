@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 
 UA = "Mozilla/5.0 (CestaApp; uso personal)"
 HERE = os.path.dirname(os.path.abspath(__file__))
+import sys; sys.path.insert(0, HERE)
+from nutricion import NUT, UD_G  # noqa: E402
 CACHE = os.path.join(HERE, "mercadona_cache.json")
 OUT = os.path.join(HERE, "..", "web", "data")
 
@@ -199,7 +201,7 @@ def mercadona_products():
     if os.path.exists(CACHE) and time.time() - os.path.getmtime(CACHE) < 6 * 3600:
         with open(CACHE, encoding="utf-8") as f:
             data = json.load(f)
-        if data and "_top" in data[0]:
+        if data and "_l2" in data[0]:
             return data
     print("Mercadona: descargando catálogo…")
     tops = get("https://tienda.mercadona.es/api/categories/?lang=es")["results"]
@@ -213,7 +215,7 @@ def mercadona_products():
                 continue
             for cat in data.get("categories", []):
                 for p in cat.get("products", []):
-                    p["_cat"], p["_catname"], p["_top"] = sub["id"], sub["name"], top["name"]
+                    p["_cat"], p["_catname"], p["_top"], p["_l2"] = sub["id"], sub["name"], top["name"], cat.get("name", "")
                     out.append(p)
             time.sleep(0.25)  # ser amables con el servidor
     with open(CACHE, "w", encoding="utf-8") as f:
@@ -221,6 +223,7 @@ def mercadona_products():
     return out
 
 
+IMG_RX = re.compile(r"/images/([0-9a-f]+)\.jpg")
 COUNT_RX = re.compile(r"(\d+)\s*(lavados|rollos|huevos|uds|ud|unidades|dosis|barras|bolsas|tortillas)")
 
 
@@ -277,20 +280,23 @@ def best_mercadona(products, it):
     extra, refp, price, p = min((c for c in cands if c[0] <= min_extra + 3), key=lambda c: c[1])
     return dict(price=round(refp * it["qty"], 2), sale_price=price, ref_price=round(refp, 4),
                 product=p["display_name"] + (f" · {p['packaging']}" if p.get("packaging") else ""),
-                url=p.get("share_url"), sec=p.get("_top", ""))
+                url=p.get("share_url"), sec=p.get("_top", ""),
+                img=(IMG_RX.search(p.get("thumbnail") or "") or [None, ""])[1])
 
 
 def compact_catalog(products):
-    """Catálogo completo en formato compacto: [id, nombre, envase, precio, €/ref, ref, sección]."""
+    """Catálogo completo en formato compacto:
+    [id, nombre, envase, precio, €/ref, ref, sección, pasillo, estante, foto]"""
     rows, seen = [], set()
     for p in products:
-        if p["id"] in seen or p.get("_top") in ("Mascotas", "Maquillaje"):
+        if p["id"] in seen or p.get("_top") == "Maquillaje":
             continue
         seen.add(p["id"])
         pi = p["price_instructions"]
+        m = IMG_RX.search(p.get("thumbnail") or "")
         rows.append([p["id"], p["display_name"], p.get("packaging") or "", float(pi["unit_price"]),
                      float(pi.get("reference_price") or pi["unit_price"]), pi.get("reference_format") or "",
-                     p.get("_catname", ""), p.get("_top", "")])
+                     p.get("_catname", ""), p.get("_top", ""), p.get("_l2", ""), m.group(1) if m else ""])
     return rows
 
 
@@ -306,7 +312,12 @@ def main():
         if not m:
             missing.append(it["name"])
         print(f"  {it['name']:<28} {m and m['price']!s:<6} {m and m['product']}")
-        items.append(dict(name=it["name"], unit=it["unit"], qty=it["qty"], ref=it["ref"], pantry=it["pantry"], m=m))
+        extra = {}
+        if it["name"] in NUT:
+            extra["nut"] = NUT[it["name"]]
+        if it["name"] in UD_G:
+            extra["gud"] = UD_G[it["name"]]
+        items.append(dict(name=it["name"], unit=it["unit"], qty=it["qty"], ref=it["ref"], pantry=it["pantry"], m=m, **extra))
     if len(missing) > 15:
         raise SystemExit(f"Faltan demasiados precios ({len(missing)}): {', '.join(missing)}")
     updated = datetime.now(timezone.utc).isoformat(timespec="minutes")
