@@ -19,6 +19,26 @@ const isStandalone = () => window.matchMedia("(display-mode: standalone)").match
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const fmtDate = iso => new Date(iso).toLocaleDateString("es-ES", {weekday: "short", day: "numeric", month: "long"});
 
+// Colores por sección del súper y por tipo de receta
+const COLORS = [
+  [/fruta|verdura|ensalada/, "#4ade80"], [/carne|aves/, "#f87171"], [/pescado|marisco/, "#60a5fa"],
+  [/huevo|leche|lacteo|yogur|postre/, "#facc15"], [/charcuter|queso/, "#fb923c"], [/panader|pan |cereal|galleta|desayuno/, "#e0a96d"],
+  [/congelad/, "#67e8f9"], [/arroz|legumbre|pasta/, "#f59e0b"], [/conserva|caldo|sopa/, "#f472b6"],
+  [/aceite|especia|salsa/, "#a3e635"], [/agua|refresco|zumo|bodega|cafe|cacao/, "#38bdf8"],
+  [/limpieza|hogar|cuidado|higiene|bebe|maquillaje|fitoterapia/, "#a78bfa"], [/aperitivo|azucar|chocolate|dulce/, "#fb7185"],
+];
+const colorFor = name => { const n = norm(name); for (const [rx, c] of COLORS) if (rx.test(n)) return c; return "#94a3b8"; };
+const dot = name => `<i class="dot" style="--c:${colorFor(name)}"></i>`;
+const catPill = name => `<span class="cat" style="--c:${colorFor(name)}">${esc(name)}</span>`;
+
+// ---------- Tema ----------
+function applyTheme() {
+  const t = state.theme || "dark";
+  document.documentElement.dataset.theme = t;
+  const dark = t === "dark" || (t === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+  $("theme-color").content = dark ? "#0f1318" : "#f3f6f5";
+}
+
 // ---------- Datos ----------
 let GEN = [], GENBY = {}, UPDATED = null, REC = [], RECBY = {}, MERC = null, MERCBY = {}, mercLoading = null;
 function loadMerc() {
@@ -33,7 +53,7 @@ function loadMerc() {
 // ---------- Estado (en el móvil) ----------
 const KEY = "cesta-app-v1";
 const defaultState = () => ({v: 1, tab: "lista", period: 1, list: [], hist: {}, trips: [], purchases: [],
-  menu: {people: 2, prefs: "", days: {}}, ings: [], pantry: [], nut: {}, timers: [], tipClosed: false});
+  menu: {people: 2, prefs: "", days: {}}, ings: [], pantry: [], nut: {}, timers: [], tipClosed: false, theme: "dark"});
 let state = defaultState();
 try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) state = {...defaultState(), ...s}; } catch (e) {}
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { toast("No se pudo guardar en el móvil"); } }
@@ -55,10 +75,18 @@ function gramsOf(ing) { // gramos de un ingrediente de receta
   const g = GENBY[ing.n]; if (!g) return 0;
   return (g.ref === "kg" || g.ref === "L") ? ing.q * g.qty * 1000 : ing.q * g.qty * (g.gud || 0);
 }
+const OILS = new Set(["Aceite de oliva virgen extra", "Aceite de girasol"]);
 function recipeNut(r) { // por ración
-  const t = [0, 0, 0, 0];
-  r.ingredientes.forEach(i => { const n = nutOf(i.n); if (!n) return; const g = gramsOf(i); for (let k = 0; k < 4; k++) t[k] += n.v[k] * g / 100; });
-  return t.map(x => x / (r.raciones || 2));
+  if (r._nut) return r._nut;
+  const t = [0, 0, 0, 0], rac = r.raciones || 2;
+  r.ingredientes.forEach(i => {
+    const n = nutOf(i.n); if (!n) return;
+    let g = gramsOf(i);
+    // Aceite de freír o pochar: solo se come una parte. Hasta 15 ml por ración cuenta entero; del resto, un 15 %.
+    if (OILS.has(i.n) && g > 15 * rac) g = 15 * rac + (g - 15 * rac) * 0.15;
+    for (let k = 0; k < 4; k++) t[k] += n.v[k] * g / 100;
+  });
+  return r._nut = t.map(x => x / rac);
 }
 
 // ---------- Hoja inferior y avisos ----------
@@ -197,7 +225,7 @@ function renderLista() {
     const groups = {};
     pending.forEach(i => (groups[sectionOf(i)] ??= []).push(i));
     Object.keys(groups).sort((a, b) => a.localeCompare(b, "es")).forEach(sec => {
-      h += `<div><div class="group-h"><span>${esc(sec)}</span></div><div class="group">${groups[sec].map(i => itemRow(i, state.list.indexOf(i), T.k)).join("")}</div></div>`;
+      h += `<div><div class="group-h"><span>${dot(sec)}${esc(sec)}</span></div><div class="group">${groups[sec].map(i => itemRow(i, state.list.indexOf(i), T.k)).join("")}</div></div>`;
     });
     if (!pending.length) h += `<div class="empty"><div class="ill">✅</div><h2>Todo en la cesta</h2><p>Pulsa «Ya lo he comprado» para guardar la compra.</p></div>`;
     if (done.length) h += `<div><div class="group-h"><span>En la cesta</span><button id="undo-all">Desmarcar</button></div><div class="group">${done.map(i => itemRow(i, state.list.indexOf(i), T.k)).join("")}</div></div>`;
@@ -245,9 +273,9 @@ function openProduct(i) {
     body.querySelector("#nf-save").onclick = () => {
       const f = body.querySelector("#nf"), vals = ["kcal", "p", "g", "h"].map(k => parseFloat(String(f[k].value).replace(",", ".")));
       if (vals.some(x => isNaN(x) || x < 0)) { toast("Rellena los cuatro valores con números"); return; }
-      state.nut[i.name] = vals; save(); toast("Valores guardados"); closeSheet();
+      state.nut[i.name] = vals; REC.forEach(r => delete r._nut); save(); toast("Valores guardados"); closeSheet();
     };
-    body.querySelector("#nf-reset")?.addEventListener("click", () => { delete state.nut[i.name]; save(); toast("Se usan los valores de referencia"); closeSheet(); });
+    body.querySelector("#nf-reset")?.addEventListener("click", () => { delete state.nut[i.name]; REC.forEach(r => delete r._nut); save(); toast("Se usan los valores de referencia"); closeSheet(); });
   }, renderAll);
 }
 
@@ -290,7 +318,7 @@ function renderResults(qraw, path, go) {
     const all = MERC || [];
     if (!path.length) {
       const secs = {}; all.forEach(m => secs[m.sec] = (secs[m.sec] || 0) + 1);
-      h += `<div><div class="group-h"><span>Secciones de Mercadona · ${num(all.length)} productos</span></div><div class="group">${Object.keys(secs).sort((a, b) => a.localeCompare(b, "es")).map(s => `<button class="rowi tap" data-go="${esc(s)}"><span class="grow"><span class="t">${esc(s)}</span><span class="s">${secs[s]} productos</span></span><span class="chev">›</span></button>`).join("")}</div></div>`;
+      h += `<div><div class="group-h"><span>Secciones de Mercadona · ${num(all.length)} productos</span></div><div class="group">${Object.keys(secs).sort((a, b) => a.localeCompare(b, "es")).map(s => `<button class="rowi tap" data-go="${esc(s)}"><span class="grow"><span class="t">${dot(s)}${esc(s)}</span><span class="s">${secs[s]} productos</span></span><span class="chev">›</span></button>`).join("")}</div></div>`;
     } else if (path.length === 1) {
       const aisles = {}; all.filter(m => m.sec === path[0]).forEach(m => aisles[m.aisle] = (aisles[m.aisle] || 0) + 1);
       h += `<button class="back" data-up="1">‹ Secciones</button><div><div class="group-h"><span>${esc(path[0])}</span></div><div class="group">${Object.keys(aisles).map(a => `<button class="rowi tap" data-go="${esc(a)}"><span class="grow"><span class="t">${esc(a)}</span><span class="s">${aisles[a]} productos</span></span><span class="chev">›</span></button>`).join("")}</div></div>`;
@@ -381,7 +409,7 @@ function renderRecetas() {
     <div class="rcards">${rs.slice(0, recShown).map(r => {
       const n = recipeNut(r), sc = recScore(r, words);
       return `<button class="rcard" data-rec="${r.id}"><span class="t">${esc(r.nombre)}</span>
-        <span class="s">${r.tiempo} min · ${esc(r.dificultad)} · ${esc(r.categoria)} · ${num(n[0])} kcal/ración</span>
+        ${catPill(r.categoria)}<span class="s">${r.tiempo} min · ${esc(r.dificultad)} · ${num(n[0])} kcal/ración</span>
         ${sc ? `<span class="m">Con ${state.ings.filter(g => recHay(r).includes(norm(g))).map(esc).join(", ")}</span>` : ""}</button>`;
     }).join("") || `<div class="empty"><h2>Sin resultados</h2><p>Prueba con otro ingrediente o categoría.</p></div>`}</div>
     ${rs.length > recShown ? `<button class="btn block" id="more">Ver más (${rs.length - recShown})</button>` : ""}`;
@@ -402,7 +430,7 @@ function scaleAmount(a, k) {
 }
 function openRecipe(id) {
   const r = RECBY[id]; if (!r) return;
-  const ppl = state.menu.people || 2, k = ppl / (r.raciones || 2);
+  const ppl = state.menu.people || 2, k = batchK(r, ppl), forTxt = (r.raciones || 2) > 2 && k === 1 ? `salen ${r.raciones} raciones` : `para ${ppl}`;
   const missing = r.ingredientes.filter(i => !have(i.n) && !GENBY[i.n]?.pantry);
   const n = recipeNut(r);
   const planGrid = () => `<div class="plan">${DAYS.map(([d, dn]) => `<span>${dn.slice(0, 3)}</span>${SLOTS.map(([s, sn]) => {
@@ -414,7 +442,7 @@ function openRecipe(id) {
     <div class="s" style="color:var(--muted);margin-top:-6px">${r.tiempo} min · ${esc(r.dificultad)} · ${esc(r.categoria)} · ${(r.momento || []).join(" y ")}</div>
     <div class="nutbar">${[["kcal", n[0], ""], ["proteína", n[1], " g"], ["grasa", n[2], " g"], ["hidratos", n[3], " g"]].map(([l, v, u]) => `<div><b>${num(v, l === "kcal" ? 0 : 1)}${u}</b>${l}</div>`).join("")}</div>
     <p class="foot" style="margin-top:-8px">Por ración, con valores medios de referencia o los que hayas apuntado.</p>
-    <div><div class="group-h"><span>Ingredientes para ${ppl}</span></div><div class="group ingl">${r.ingredientes.map(i => {
+    <div><div class="group-h"><span>Ingredientes · ${forTxt}</span></div><div class="group ingl">${r.ingredientes.map(i => {
       const ok = have(i.n), pantry = GENBY[i.n]?.pantry;
       return `<div class="rowi">${img(GENBY[i.n]?.m?.img)}<span class="grow"><span class="t">${esc(i.n)}</span><span class="s">${esc(scaleAmount(i.a, k))}${pantry ? " · despensa" : ""}</span></span><span class="${ok ? "ok" : pantry ? "" : "miss"}" style="font-size:14px">${ok ? "✓ en lista" : pantry ? "" : "falta"}</span></div>`;
     }).join("")}${(r.otros || []).map(o => `<div class="rowi"><span class="thumb ph" aria-hidden="true"></span><span class="grow"><span class="t">${esc(o)}</span><span class="s">Búscalo en la tienda</span></span></div>`).join("")}</div></div>
@@ -478,10 +506,11 @@ setInterval(() => {
 }, 1000);
 
 // ---------- Menú semanal ----------
+const batchK = (r, ppl = state.menu.people || 2) => (r.raciones || 2) > 2 ? Math.max(1, ppl / r.raciones) : ppl / (r.raciones || 2);
 const menuRecipes = () => DAYS.flatMap(([d]) => SLOTS.map(([s]) => RECBY[state.menu.days?.[d]?.[s]]).filter(Boolean));
 function menuNeeds() {
   const acc = {};
-  menuRecipes().forEach(r => { const k = (state.menu.people || 2) / (r.raciones || 2); r.ingredientes.forEach(i => acc[i.n] = (acc[i.n] || 0) + i.q * k); });
+  menuRecipes().forEach(r => { const k = batchK(r); r.ingredientes.forEach(i => acc[i.n] = (acc[i.n] || 0) + i.q * k); });
   return acc;
 }
 function filteredPool() {
@@ -542,7 +571,7 @@ function renderMenu() {
   h += DAYS.map(([d, dn]) => `<div class="day"><div class="day-h"><span>${dn}</span>${d === todayKey ? `<span class="today">Hoy</span>` : ""}</div>${SLOTS.map(([s, sn]) => {
     const r = RECBY[state.menu.days?.[d]?.[s]];
     return `<div class="slot"><span class="when">${sn}</span>
-      <button class="dish ${r ? "" : "empty"}" data-slot="${d}|${s}">${r ? `<span class="t">${esc(r.nombre)}</span><span class="s">${r.tiempo} min · ${esc(r.categoria)} · ${num(recipeNut(r)[0])} kcal</span>` : `<span class="t">+ Elegir plato</span>`}</button>
+      <button class="dish ${r ? "" : "empty"}" data-slot="${d}|${s}">${r ? `<span class="t">${esc(r.nombre)}</span><span class="s">${dot(r.categoria)}${r.tiempo} min · ${esc(r.categoria)} · ${num(recipeNut(r)[0])} kcal</span>` : `<span class="t">+ Elegir plato</span>`}</button>
       ${r ? `<button class="mini" data-swap="${d}|${s}" aria-label="Cambiar por otro parecido">↻</button>` : ""}</div>`;
   }).join("")}</div>`).join("");
   h += `<button class="btn primary block" id="m-list" ${n ? "" : "disabled"}>Crear la lista de la compra</button>
@@ -594,6 +623,9 @@ function renderAjustes() {
   const upd = UPDATED ? new Date(UPDATED).toLocaleString("es-ES", {dateStyle: "long", timeStyle: "short"}) : "—";
   const own = Object.keys(state.nut);
   $("s-ajustes").innerHTML = `
+    <div><div class="group-h"><span>Apariencia</span></div><div class="group" style="padding:12px 16px">
+      <div class="seg2" role="group" aria-label="Tema">${[["dark", "Oscuro"], ["light", "Claro"], ["auto", "Sistema"]].map(([k, l]) => `<button data-theme-set="${k}" aria-pressed="${(state.theme || "dark") === k}">${l}</button>`).join("")}</div>
+    </div><p class="foot">«Sistema» sigue el modo claro u oscuro del iPhone. La barra de arriba del iPhone se ajusta al volver a abrir la app.</p></div>
     <div><div class="group-h"><span>Precios</span></div><div class="group">
       <div class="rowi"><span class="grow">Actualizados</span><span class="s" style="color:var(--muted)">${upd}</span></div>
       <div class="rowi"><span class="grow"><span class="t">Fuente</span><span class="s">Tienda online de Mercadona. Se actualizan solos cada lunes. Pueden variar algo según tu tienda.</span></span></div>
@@ -617,6 +649,7 @@ function renderAjustes() {
     </div>
     <p class="foot">Cesta · ${REC.length} recetas · ${GEN.length} alimentos básicos${MERC ? ` · ${num(MERC.length)} productos de Mercadona` : ""}</p>`;
   const el = $("s-ajustes");
+  el.querySelectorAll("[data-theme-set]").forEach(b => b.onclick = () => { state.theme = b.dataset.themeSet; applyTheme(); commit(); });
   el.querySelector("#exp").onclick = exportData;
   el.querySelector("#imp").onchange = e => importData(e.target.files[0]);
   twice(el.querySelector("#clr-hist"), "Pulsa otra vez para borrarlo", () => { state.hist = {}; state.trips = []; state.purchases = []; commit(); toast("Historial borrado"); });
@@ -635,7 +668,7 @@ function importData(f) {
   f.text().then(t => {
     const d = JSON.parse(t);
     if (!d || d.v !== 1 || !Array.isArray(d.list)) throw new Error();
-    state = {...defaultState(), ...d, tab: "ajustes"}; commit(); toast("Copia restaurada");
+    state = {...defaultState(), ...d, tab: "ajustes"}; REC.forEach(r => delete r._nut); applyTheme(); commit(); toast("Copia restaurada");
   }).catch(() => toast("Ese archivo no es una copia de Cesta"));
 }
 
@@ -646,6 +679,8 @@ function renderAll() {
   renderTimers();
 }
 if (!TABS[state.tab]) state.tab = "lista";
+applyTheme();
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
 Promise.all([
   fetch("data/precios.json").then(r => r.json()).then(d => { GEN = d.items; GENBY = Object.fromEntries(GEN.map(g => [g.name, g])); UPDATED = d.updated; }),
   fetch("data/recetas.json").then(r => r.json()).then(d => { REC = d; RECBY = Object.fromEntries(REC.map(r => [r.id, r])); }),

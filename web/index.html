@@ -5,11 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Cesta</title>
 <meta name="description" content="Lista de la compra con precios de Mercadona, menú semanal y recetas.">
-<meta name="theme-color" content="#2f6b3f" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121814" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0f1318" id="theme-color">
+<script>
+// Tema antes de pintar: oscuro por defecto. La barra de estado del iPhone se adapta al tema al abrir la app.
+(function(){var t="dark";try{t=(JSON.parse(localStorage.getItem("cesta-app-v1"))||{}).theme||"dark";}catch(e){}
+document.documentElement.dataset.theme=t;
+var dark=t==="dark"||(t==="auto"&&matchMedia("(prefers-color-scheme: dark)").matches);
+document.write('<meta name="apple-mobile-web-app-status-bar-style" content="'+(dark?"black-translucent":"default")+'">');
+document.getElementById("theme-color").content=dark?"#0f1318":"#f3f6f5";})();
+</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Cesta">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
@@ -18,19 +24,32 @@
 /* Diseño: app de una mano para iPhone. Título grande arriba, contenido en grupos redondeados
    tipo iOS, barra de pestañas abajo y hojas que suben desde abajo para buscar y elegir. */
 :root{
-  --bg:#f2f3ee; --card:#ffffff; --ink:#18231c; --muted:#6b776e; --line:#e2e6dd; --fill:#eceee7;
-  --leaf:#2f6b3f; --leaf-ink:#ffffff; --leaf-soft:#e3efe2; --mustard:#e2b13c; --mustard-soft:#fbf1d6;
-  --warn:#a85f00; --danger:#c0392b; --bar:rgba(248,249,245,.86);
+  /* Oscuro (por defecto): noche azul pizarra, menta para acciones, ámbar para avisos */
+  --bg:#0f1318; --card:#1a2028; --ink:#f1f4f7; --muted:#8e9aa8; --line:#2b3440; --fill:#232b35;
+  --leaf:#34d399; --leaf-ink:#062b1d; --leaf-soft:rgba(52,211,153,.14); --mustard:#fbbf24; --mustard-soft:rgba(251,191,36,.16);
+  --warn:#fbbf24; --danger:#f87171; --bar:rgba(17,22,28,.82);
+  --hero:linear-gradient(135deg,#059669 0%,#0d9488 45%,#0369a1 100%); --hero-ink:#ffffff; --hero-seg:rgba(255,255,255,.2);
+  --thumb-bg:#ffffff; --shadow:0 1px 0 rgba(255,255,255,.03) inset;
   --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --font-d:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
-  --r:14px; --tabh:56px;
+  --r:16px; --tabh:56px;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#f3f6f5; --card:#ffffff; --ink:#12201b; --muted:#5f6f69; --line:#dfe6e3; --fill:#ebf0ee;
+  --leaf:#059669; --leaf-ink:#ffffff; --leaf-soft:#dcf5ea; --mustard:#d97706; --mustard-soft:#fdf0d8;
+  --warn:#b45309; --danger:#dc2626; --bar:rgba(248,250,249,.86);
+  --hero:linear-gradient(135deg,#047857 0%,#0f766e 45%,#075985 100%); --hero-ink:#ffffff; --hero-seg:rgba(255,255,255,.22);
+  --shadow:0 1px 2px rgba(16,32,27,.06);
   color-scheme:light;
 }
-@media (prefers-color-scheme: dark){:root{
-  --bg:#0f1411; --card:#1a211c; --ink:#e9efe9; --muted:#97a49a; --line:#2a332d; --fill:#232b25;
-  --leaf:#7cc48e; --leaf-ink:#0f1411; --leaf-soft:#1e3325; --mustard:#e8bf5a; --mustard-soft:#352b18;
-  --warn:#eaa54a; --danger:#ff6b5e; --bar:rgba(22,28,24,.86);
-  color-scheme:dark}}
+@media (prefers-color-scheme: light){:root[data-theme="auto"]{
+  --bg:#f3f6f5; --card:#ffffff; --ink:#12201b; --muted:#5f6f69; --line:#dfe6e3; --fill:#ebf0ee;
+  --leaf:#059669; --leaf-ink:#ffffff; --leaf-soft:#dcf5ea; --mustard:#d97706; --mustard-soft:#fdf0d8;
+  --warn:#b45309; --danger:#dc2626; --bar:rgba(248,250,249,.86);
+  --hero:linear-gradient(135deg,#047857 0%,#0f766e 45%,#075985 100%); --hero-ink:#ffffff; --hero-seg:rgba(255,255,255,.22);
+  --shadow:0 1px 2px rgba(16,32,27,.06);
+  color-scheme:light}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 var(--font)}
 body{min-height:100dvh;overscroll-behavior-y:none}
@@ -51,7 +70,7 @@ section{display:grid;gap:18px;grid-template-columns:minmax(0,1fr)}
 section > *{min-width:0}
 
 /* Grupos y filas estilo iOS */
-.group{background:var(--card);border-radius:var(--r);overflow:hidden}
+.group{background:var(--card);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
 .group-h{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 6px 16px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .group-h button{background:none;border:0;color:var(--leaf);font-size:15px;text-transform:none;letter-spacing:0;padding:0}
 .rowi{display:flex;align-items:center;gap:12px;padding:11px 16px;min-height:48px;position:relative}
@@ -95,12 +114,12 @@ section > *{min-width:0}
 input.plain,select.plain{border:0;background:var(--fill);border-radius:10px;padding:10px 12px;width:100%;font-size:16px}
 
 /* Tarjeta resumen */
-.hero{background:var(--leaf);color:var(--leaf-ink);border-radius:var(--r);padding:16px;display:grid;gap:4px}
+.hero{background:var(--hero);color:var(--hero-ink);box-shadow:0 10px 30px -12px rgba(5,150,105,.55);border-radius:var(--r);padding:16px;display:grid;gap:4px}
 .hero .lbl{font-size:14px;opacity:.85}
 .hero .big{font:700 34px/1.1 var(--font-d);font-variant-numeric:tabular-nums}
-.hero .seg{display:flex;background:rgba(255,255,255,.18);border-radius:9px;padding:2px;justify-self:start;margin-top:6px}
+.hero .seg{display:flex;background:var(--hero-seg);border-radius:9px;padding:2px;justify-self:start;margin-top:6px}
 .hero .seg button{border:0;background:none;color:inherit;font-size:14px;font-weight:600;padding:5px 12px;border-radius:7px}
-.hero .seg button[aria-pressed="true"]{background:var(--leaf-ink);color:var(--leaf)}
+.hero .seg button[aria-pressed="true"]{background:#fff;color:#065f46}
 .kpis{display:flex;gap:18px;flex-wrap:wrap;margin-top:4px}
 .kpis div{font-size:13px;opacity:.9}
 .kpis b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
@@ -162,7 +181,7 @@ input.plain,select.plain{border:0;background:var(--fill);border-radius:10px;padd
 
 
 /* Miniaturas de producto */
-.thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none;background:#fff;box-shadow:inset 0 0 0 .5px var(--line)}
+.thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex:none;background:var(--thumb-bg,#fff);box-shadow:inset 0 0 0 .5px var(--line)}
 .thumb.ph{background:var(--fill);box-shadow:none;display:grid;place-items:center;color:var(--muted);font-weight:700;font-size:15px}
 .linkish{border:0;background:none;text-align:left;padding:0;display:flex;gap:10px;align-items:center;min-width:0}
 .linkish .txt{min-width:0;display:block}
@@ -198,6 +217,17 @@ input.pill{border-radius:999px;padding:8px 14px;width:200px}
 .tmr.done{background:var(--mustard);color:#1b1b1b;animation:pulse 1s ease-in-out infinite alternate}
 @keyframes pulse{to{transform:scale(1.02)}}
 .tabbar button{min-width:0;flex:1;padding:4px 2px}
+
+
+/* Colores por sección y por tipo de receta */
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--c);margin-right:8px;vertical-align:1px;box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 22%,transparent)}
+.cat{display:inline-block;justify-self:start;font-size:12px;font-weight:700;letter-spacing:.02em;border-radius:999px;padding:3px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 16%,transparent)}
+.rcard{position:relative}
+.chip.on{box-shadow:0 4px 14px -6px var(--leaf)}
+.seg2{display:flex;background:var(--fill);border-radius:10px;padding:2px}
+.seg2 button{flex:1;border:0;background:none;border-radius:8px;padding:7px 10px;font-size:15px;font-weight:600;color:var(--muted)}
+.seg2 button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.top h1{background:linear-gradient(90deg,var(--ink) 60%,var(--leaf));-webkit-background-clip:text;background-clip:text;color:transparent}
 
 /* Hoja inferior */
 .sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}

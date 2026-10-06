@@ -24,6 +24,13 @@ DIFF = {"1": "Fácil", "2": "Media", "3": "Difícil"}
 WHEN = {"C": ["comida"], "N": ["cena"], "A": ["comida", "cena"]}
 ING_RX = re.compile(r"^(.*?)\s+([\d.]+)\s*(g|ml)?$")
 
+# Raciones de las recetas que no son para 2 (bizcochos, tartas, croquetas…). La primera regla que encaje.
+RACIONES = [
+    (r"bizcocho de chocolate en taza", 1), (r"tarta|bizcocho|brownie|magdalenas|galletas", 8),
+    (r"flan|natillas|crema catalana|arroz con leche|mousse|leche frita|torrijas|compota|peras al vino", 4),
+    (r"croquetas|empanada|empanadillas|quiche|pastel de pescado|granola", 4),
+]
+
 # Tiempos habituales cuando el paso no dice cuánto (en minutos). Se aplica la primera regla que encaje.
 STEP_TIMES = [
     (r"cuece (?:la |los |el )?(?:fideos)", 4), (r"cuece (?:la )?pasta|cuece los (?:espaguetis|macarrones)", 10),
@@ -113,10 +120,11 @@ def main():
                     s = s.strip()
                     if s:
                         pasos.append({"t": s if s.endswith(".") else s + ".", "m": step_minutes(s)})
+                rac = next((n for rx, n in RACIONES if re.search(rx, norm(name))), 2)
                 rec = dict(
                     id="r" + str(len(out) + 1), nombre=name, tiempo=int(mins), dificultad=DIFF[dif], momento=WHEN[when],
-                    categoria=cat, ingredientes=ingredientes, pasos=pasos, raciones=2,
-                    nut=[round(nut[0] / 2), round(nut[1] / 2, 1), round(nut[2] / 2, 1), round(nut[3] / 2, 1)],
+                    categoria=cat, ingredientes=ingredientes, pasos=pasos, raciones=rac,
+                    nut=[round(nut[0] / rac), round(nut[1] / rac, 1), round(nut[2] / rac, 1), round(nut[3] / rac, 1)],
                 )
                 if otros:
                     rec["otros"] = otros
