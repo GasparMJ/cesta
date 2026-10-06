@@ -1,0 +1,65 @@
+name: Actualizar precios y publicar
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"   # cada lunes a las 05:00 UTC (7:00 en España en verano, 6:00 en invierno)
+  workflow_dispatch:       # botón «Run workflow» para lanzarlo a mano
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Descargar precios de Mercadona
+        id: precios
+        if: github.event_name != 'push'
+        # Si Mercadona no responde, se siguen publicando los datos de la semana anterior.
+        continue-on-error: true
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python scripts/actualizar_precios.py
+
+      - name: Generar recetas
+        env:
+          PYTHONIOENCODING: utf-8
+        run: python scripts/build_recetas.py
+
+      - name: Guardar los datos nuevos en el repositorio
+        if: github.event_name != 'push' && steps.precios.outcome == 'success'
+        run: |
+          git config user.name "cesta-bot"
+          git config user.email "cesta-bot@users.noreply.github.com"
+          git add web/data
+          git diff --cached --quiet || (git commit -m "Precios de Mercadona $(date +%F)" && git push)
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

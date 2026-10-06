@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cesta</title>
+<meta name="description" content="Lista de la compra con precios de Mercadona, menú semanal y recetas.">
+<meta name="theme-color" content="#2f6b3f" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121814" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Cesta">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+/* Diseño: app de una mano para iPhone. Título grande arriba, contenido en grupos redondeados
+   tipo iOS, barra de pestañas abajo y hojas que suben desde abajo para buscar y elegir. */
+:root{
+  --bg:#f2f3ee; --card:#ffffff; --ink:#18231c; --muted:#6b776e; --line:#e2e6dd; --fill:#eceee7;
+  --leaf:#2f6b3f; --leaf-ink:#ffffff; --leaf-soft:#e3efe2; --mustard:#e2b13c; --mustard-soft:#fbf1d6;
+  --warn:#a85f00; --danger:#c0392b; --bar:rgba(248,249,245,.86);
+  --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-d:-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --r:14px; --tabh:56px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1411; --card:#1a211c; --ink:#e9efe9; --muted:#97a49a; --line:#2a332d; --fill:#232b25;
+  --leaf:#7cc48e; --leaf-ink:#0f1411; --leaf-soft:#1e3325; --mustard:#e8bf5a; --mustard-soft:#352b18;
+  --warn:#eaa54a; --danger:#ff6b5e; --bar:rgba(22,28,24,.86);
+  color-scheme:dark}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 var(--font)}
+body{min-height:100dvh;overscroll-behavior-y:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--leaf);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* Cabecera */
+.top{position:sticky;top:0;z-index:10;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 8px;background:var(--bg)}
+.top.scrolled{background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-bottom:.5px solid var(--line)}
+.top-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:34px}
+.top h1{font:700 32px/1.1 var(--font-d);letter-spacing:-.02em;margin:0}
+.top .sub{font-size:14px;color:var(--muted);margin-top:2px}
+
+main{padding:4px 16px calc(var(--tabh) + env(safe-area-inset-bottom,0px) + 24px);max-width:680px;margin:0 auto}
+section{display:grid;gap:18px;grid-template-columns:minmax(0,1fr)}
+section > *{min-width:0}
+
+/* Grupos y filas estilo iOS */
+.group{background:var(--card);border-radius:var(--r);overflow:hidden}
+.group-h{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 6px 16px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.group-h button{background:none;border:0;color:var(--leaf);font-size:15px;text-transform:none;letter-spacing:0;padding:0}
+.rowi{display:flex;align-items:center;gap:12px;padding:11px 16px;min-height:48px;position:relative}
+.rowi + .rowi::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--line)}
+.rowi.indent + .rowi.indent::before{left:56px}
+.rowi .grow{flex:1;min-width:0}
+.rowi .t{display:block;overflow-wrap:anywhere}
+.rowi .s{display:block;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.rowi .p{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.rowi.tap{cursor:pointer;width:100%;border:0;background:none;text-align:left}
+.rowi.tap:active{background:var(--fill)}
+.chev{color:var(--muted);font-size:20px;line-height:1}
+.foot{font-size:13px;color:var(--muted);margin:6px 16px 0}
+
+/* Casilla de la lista */
+.check{appearance:none;-webkit-appearance:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);flex:none;margin:0;display:grid;place-items:center;background:var(--card)}
+.check:checked{background:var(--leaf);border-color:var(--leaf)}
+.check:checked::after{content:"";width:7px;height:12px;border:solid var(--leaf-ink);border-width:0 2.5px 2.5px 0;transform:rotate(45deg) translate(-1px,-1px)}
+.done .t{text-decoration:line-through;color:var(--muted)}
+.done .p{color:var(--muted)}
+.stepper{display:flex;align-items:center;background:var(--fill);border-radius:999px;flex:none}
+.stepper button{border:0;background:none;width:32px;height:30px;font-size:19px;color:var(--leaf)}
+.right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+.rowi .s.one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stepper span{min-width:18px;text-align:center;font-variant-numeric:tabular-nums;font-size:15px}
+
+/* Botones */
+.btn{border:0;border-radius:12px;padding:13px 18px;font-weight:600;background:var(--fill);color:var(--ink);display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px}
+.btn.primary{background:var(--leaf);color:var(--leaf-ink)}
+.btn.block{width:100%}
+.btn.sm{min-height:36px;padding:7px 14px;font-size:15px;border-radius:10px}
+.btn:disabled{opacity:.5}
+.btn:active{transform:scale(.98)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.icon-btn{border:0;background:var(--fill);color:var(--leaf);width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:22px;flex:none}
+
+/* Campo de búsqueda */
+.field{display:flex;align-items:center;gap:8px;background:var(--fill);border-radius:12px;padding:0 12px;min-height:44px}
+.field input{border:0;background:none;flex:1;min-width:0;padding:10px 0;font-size:17px;outline:none}
+.field svg{flex:none;color:var(--muted)}
+input.plain,select.plain{border:0;background:var(--fill);border-radius:10px;padding:10px 12px;width:100%;font-size:16px}
+
+/* Tarjeta resumen */
+.hero{background:var(--leaf);color:var(--leaf-ink);border-radius:var(--r);padding:16px;display:grid;gap:4px}
+.hero .lbl{font-size:14px;opacity:.85}
+.hero .big{font:700 34px/1.1 var(--font-d);font-variant-numeric:tabular-nums}
+.hero .seg{display:flex;background:rgba(255,255,255,.18);border-radius:9px;padding:2px;justify-self:start;margin-top:6px}
+.hero .seg button{border:0;background:none;color:inherit;font-size:14px;font-weight:600;padding:5px 12px;border-radius:7px}
+.hero .seg button[aria-pressed="true"]{background:var(--leaf-ink);color:var(--leaf)}
+.kpis{display:flex;gap:18px;flex-wrap:wrap;margin-top:4px}
+.kpis div{font-size:13px;opacity:.9}
+.kpis b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+
+/* Chips */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 16px;margin:0 -16px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips.wrap{flex-wrap:wrap;overflow:visible;margin:0;padding:0}
+.chip{border:0;background:var(--card);border-radius:999px;padding:8px 14px;font-size:15px;white-space:nowrap;flex:none;box-shadow:inset 0 0 0 .5px var(--line)}
+.chip.on{background:var(--leaf);color:var(--leaf-ink)}
+.chip.soft{background:var(--mustard-soft)}
+.badge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:var(--leaf-soft);color:var(--leaf);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px;white-space:nowrap}
+
+/* Menú semanal */
+.day{background:var(--card);border-radius:var(--r);overflow:hidden}
+.day-h{display:flex;justify-content:space-between;align-items:center;padding:10px 16px 4px;font-weight:700}
+.day-h .today{font-size:12px;font-weight:700;color:var(--leaf);text-transform:uppercase;letter-spacing:.04em}
+.slot{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 16px;min-height:54px;position:relative}
+.slot + .slot::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:.5px solid var(--line)}
+.slot .when{font-size:12px;color:var(--muted);width:52px;flex:none;text-transform:uppercase;letter-spacing:.04em}
+.slot .dish{flex:1;min-width:0;border:0;background:none;text-align:left;padding:4px 0}
+.slot .dish .t{display:block}
+.slot .dish .s{display:block;font-size:13px;color:var(--muted)}
+.slot .dish.empty .t{color:var(--leaf);font-weight:600}
+.slot .mini{border:0;background:none;color:var(--muted);width:36px;height:36px;font-size:18px;flex:none}
+
+/* Recetas */
+.rcards{display:grid;gap:12px}
+.rcard{background:var(--card);border-radius:var(--r);padding:14px 16px;border:0;text-align:left;display:grid;gap:4px;width:100%}
+.rcard:active{background:var(--fill)}
+.rcard .t{font-weight:600;font-size:17px}
+.rcard .s{font-size:13px;color:var(--muted)}
+.rcard .m{font-size:13px;color:var(--leaf);font-weight:600}
+.steps{margin:0;padding-left:22px;display:grid;gap:8px}
+.ingl .rowi{padding:9px 16px;min-height:40px}
+.ok{color:var(--leaf)} .miss{color:var(--warn)}
+.plan{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:center;font-size:15px}
+.plan button{border:0;background:var(--fill);border-radius:9px;padding:8px 4px;font-size:14px}
+.plan button.taken{background:var(--mustard-soft)}
+.plan button.sel{background:var(--leaf);color:var(--leaf-ink)}
+
+/* Vacíos y avisos */
+.empty{background:var(--card);border-radius:var(--r);padding:28px 20px;text-align:center;display:grid;gap:10px;justify-items:center}
+.empty .ill{font-size:44px}
+.empty h2{font:700 20px var(--font-d);margin:0}
+.empty p{margin:0;color:var(--muted);font-size:15px;max-width:34ch}
+.tip{background:var(--mustard-soft);border-radius:var(--r);padding:12px 14px;font-size:15px;display:flex;gap:10px;align-items:flex-start}
+.tip b{display:block}
+.tip button{margin-left:auto;border:0;background:none;color:var(--muted);font-size:20px;padding:0 4px}
+
+/* Barra de pestañas */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:space-around;
+  padding:6px 8px calc(env(safe-area-inset-bottom,0px) + 4px);background:var(--bar);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);border-top:.5px solid var(--line)}
+.tabbar button{border:0;background:none;display:grid;justify-items:center;gap:2px;font-size:11px;font-weight:500;color:var(--muted);padding:4px 10px;min-width:64px}
+.tabbar button[aria-selected="true"]{color:var(--leaf)}
+.tabbar svg{width:26px;height:26px}
+.tabbar .dot{position:absolute;margin-left:22px;margin-top:-2px;min-width:18px;height:18px;border-radius:9px;background:var(--mustard);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 5px}
+
+/* Hoja inferior */
+.sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.35);animation:fade .2s ease-out}
+.sheet .panel{position:relative;width:100%;max-width:680px;max-height:92dvh;background:var(--bg);border-radius:16px 16px 0 0;display:flex;flex-direction:column;animation:up .28s cubic-bezier(.2,.8,.2,1)}
+.sheet .handle{width:38px;height:5px;border-radius:3px;background:var(--line);margin:8px auto 0}
+.sheet .sh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 16px 10px}
+.sheet .sh h2{font:700 20px var(--font-d);margin:0;min-width:0}
+.sheet .sh button{border:0;background:none;color:var(--leaf);font-weight:600;font-size:17px;padding:6px 0}
+.sheet .sb{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 16px calc(env(safe-area-inset-bottom,0px) + 20px);display:grid;gap:16px;align-content:start}
+@keyframes up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.sheet .panel,.sheet .backdrop{animation:none}}
+
+.toast{position:fixed;left:50%;bottom:calc(var(--tabh) + env(safe-area-inset-bottom,0px) + 16px);transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:15px;max-width:calc(100% - 32px);box-shadow:0 6px 20px rgba(0,0,0,.2)}
+</style>
+</head>
+<body>
+<header class="top" id="top">
+  <div class="top-row">
+    <div><h1 id="title">Lista</h1><div class="sub" id="subtitle"></div></div>
+    <button class="icon-btn" id="top-action" aria-label="Añadir productos">＋</button>
+  </div>
+</header>
+
+<main>
+  <section id="s-lista"></section>
+  <section id="s-menu" hidden></section>
+  <section id="s-recetas" hidden></section>
+  <section id="s-ajustes" hidden></section>
+</main>
+
+<nav class="tabbar" role="tablist">
+  <button role="tab" data-tab="lista" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.5 11h-11z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg>
+    <span id="badge-lista" class="dot" hidden></span>Lista</button>
+  <button role="tab" data-tab="menu" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>
+    Menú</button>
+  <button role="tab" data-tab="recetas" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M8 7c0-1.5 1-2 1-3M12 7c0-1.5 1-2 1-3M16 7c0-1.5 1-2 1-3"/></svg>
+    Recetas</button>
+  <button role="tab" data-tab="ajustes" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6l2.4 1.8M17.4 16.2l2.4 1.8M2.5 12h3M18.5 12h3M4.2 18l2.4-1.8M17.4 7.8 19.8 6"/></svg>
+    Ajustes</button>
+</nav>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="backdrop" id="sheet-bg"></div>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="handle"></div>
+    <div class="sh"><h2 id="sheet-title"></h2><button id="sheet-close">Listo</button></div>
+    <div class="sb" id="sheet-body"></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
